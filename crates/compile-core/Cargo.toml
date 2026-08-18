@@ -1,0 +1,15 @@
+[package]
+name = "compile-core"
+version = "0.1.0"
+edition = "2021"
+description = "Forest Data Exchange compile-manifest matching and GFB3 dataset compilation"
+
+[dependencies]
+polars = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+chrono = { workspace = true }
+calamine = { workspace = true }
+rust_xlsxwriter = { workspace = true }
+zip = { workspace = true }

@@ -1,0 +1,48 @@
+{
+  "plot_count": 518,
+  "countries": {
+    "Australia": 20,
+    "Brazil": 42,
+    "Cameroon": 16,
+    "Canada": 32,
+    "Chile": 16,
+    "China": 28,
+    "Colombia": 18,
+    "Finland": 16,
+    "France": 22,
+    "Gabon": 12,
+    "Germany": 18,
+    "Ghana": 14,
+    "India": 22,
+    "Indonesia": 24,
+    "Japan": 18,
+    "Kenya": 12,
+    "Malaysia": 16,
+    "Mexico": 22,
+    "New Zealand": 12,
+    "Peru": 22,
+    "South Africa": 14,
+    "Spain": 20,
+    "Sweden": 20,
+    "United Kingdom": 14,
+    "United States": 48
+  },
+  "forest_types_present": {
+    "Boreal": 36,
+    "Coniferous": 79,
+    "Deciduous": 58,
+    "Mangrove": 30,
+    "Mediterranean": 24,
+    "Mixed": 99,
+    "Temperate": 49,
+    "Tropical": 143
+  },
+  "forest_types_absent": [
+    "Subtropical",
+    "Montane",
+    "Dry forest",
+    "Plantation"
+  ],
+  "year_min": 1940,
+  "year_max": 2024
+}

@@ -1,0 +1,9 @@
+/target
+**/*.rs.bk
+.DS_Store
+Thumbs.db
+*.log
+.idea/
+.vscode/
+apps/compiler/src-tauri/gen/
+apps/compiler/src-tauri/target/

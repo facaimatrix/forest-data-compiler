@@ -1,0 +1,165 @@
+{
+  "schema": "forest-data-exchange.compile_manifest",
+  "version": 1,
+  "generated_at": "2026-08-18T16:05:14.226Z",
+  "notes": [
+    "This file describes project requirements for offline / desktop compilation.",
+    "Select local GFB3 tree-level files that satisfy mandatory attributes, geography, and year range.",
+    "Map products list requested analytical outputs for the desktop compiler.",
+    "Ideal attributes / maps are optional ranking hints, not hard filters.",
+    "Upload the finished compiled product via Admin → Compiled Data → Upload compiled file."
+  ],
+  "project": {
+    "id": "3bc17983-0f59-46cc-820f-b0d0fd62c931",
+    "title": "Mycorrhizal strategies regulate biodiversity–multifunctionality relationships across spatial scales",
+    "status": "approved_by_editors",
+    "pi_email": "frivasfu@purdue.edu",
+    "pi_name": "frivasfu",
+    "census_frequency": "two",
+    "board_deadline": "2026-09-01T15:56:48.768+00:00"
+  },
+  "requirements": {
+    "guaranteed_fields": [
+      "DBH",
+      "Year",
+      "PlotID",
+      "Latitude (plot)",
+      "Longitude (plot)"
+    ],
+    "mandatory_attributes": [],
+    "ideal_attributes": [
+      {
+        "key": "agb",
+        "label": "Aboveground Biomass (AGB)",
+        "dataset_flag": "has_agb"
+      },
+      {
+        "key": "mortality",
+        "label": "Mortality",
+        "dataset_flag": "has_mortality"
+      },
+      {
+        "key": "recruitment",
+        "label": "Recruitment",
+        "dataset_flag": "has_recruitment"
+      }
+    ],
+    "mandatory_map_products": [],
+    "ideal_map_products": [
+      {
+        "key": "aboveground_biomass_map",
+        "label": "Aboveground biomass map"
+      }
+    ],
+    "geography": {
+      "scope": "countries",
+      "continents": [],
+      "ecoregions": [],
+      "countries": [
+        "Canada",
+        "United States",
+        "Mexico"
+      ],
+      "extent_shapefile_path": null,
+      "extent_shapefile_name": null
+    },
+    "forest_types": [
+      "All"
+    ],
+    "year_range": {
+      "year_start": 1950,
+      "year_end": "present"
+    }
+  },
+  "matching_rules": {
+    "dataset_must_have_all_mandatory_attributes": false,
+    "geography": "filter local plots/files to selected countries (desktop GIS / metadata)",
+    "year_range": "filter GFB3 Year to requirements.year_range.start through end (end \"present\" = no upper bound)",
+    "forest_types": "if not All, keep plots/files matching at least one selected forest type",
+    "ideal_attributes_are_optional": true,
+    "map_products_are_outputs": true
+  },
+  "registered_datasets": {
+    "suitable": [
+      {
+        "id": "05a7c52b-6629-46ef-bd63-4fe377ef2eb3",
+        "file_name": "in_chl_rivas_2025",
+        "contributor_email": "frivasfu@purdue.edu",
+        "contributor_name": "frivasfu",
+        "continent": "South America",
+        "ecoregion": "Temperate broadleaf & mixed forests",
+        "num_plots": 4,
+        "attributes": {
+          "tree_height": false,
+          "agb": false,
+          "wood_density": true,
+          "crown_diameter": false,
+          "mortality": true,
+          "recruitment": true,
+          "coordinates": false
+        }
+      },
+      {
+        "id": "358b4ed3-3ea1-4317-958f-d23f93135c08",
+        "file_name": "in_pe_rivas_2026_m",
+        "contributor_email": "frivasfu@purdue.edu",
+        "contributor_name": "frivasfu",
+        "continent": "South America",
+        "ecoregion": "Temperate broadleaf & mixed forests",
+        "num_plots": 12,
+        "attributes": {
+          "tree_height": true,
+          "agb": false,
+          "wood_density": false,
+          "crown_diameter": false,
+          "mortality": true,
+          "recruitment": true,
+          "coordinates": false
+        }
+      },
+      {
+        "id": "3b5a2c5a-8d94-4292-bd0d-8c12cf757773",
+        "file_name": "in_chl_rivas_2026_m",
+        "contributor_email": "frivasfu@purdue.edu",
+        "contributor_name": "frivasfu",
+        "continent": "South America",
+        "ecoregion": "Temperate broadleaf & mixed forests",
+        "num_plots": 12,
+        "attributes": {
+          "tree_height": false,
+          "agb": false,
+          "wood_density": false,
+          "crown_diameter": false,
+          "mortality": true,
+          "recruitment": false,
+          "coordinates": false
+        }
+      },
+      {
+        "id": "729e4467-a09f-4b8b-b1c3-08ff036da8d1",
+        "file_name": "FIA",
+        "contributor_email": "choi794@purdue.edu",
+        "contributor_name": "WookJin Choi",
+        "continent": "North America",
+        "ecoregion": "Temperate broadleaf & mixed forests",
+        "num_plots": 2,
+        "attributes": {
+          "tree_height": false,
+          "agb": false,
+          "wood_density": false,
+          "crown_diameter": false,
+          "mortality": false,
+          "recruitment": false,
+          "coordinates": true
+        }
+      }
+    ],
+    "joined_owner_emails": [],
+    "pending_owner_emails": [
+      "frivasfu@purdue.edu",
+      "choi794@purdue.edu"
+    ],
+    "compatible_plots": 30,
+    "join_percent": 0
+  }
+}

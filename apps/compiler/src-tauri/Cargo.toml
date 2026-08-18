@@ -1,0 +1,19 @@
+[package]
+name = "compiler"
+version = "0.1.0"
+edition = "2021"
+
+[lib]
+name = "compiler_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[dependencies]
+tauri = { version = "2", features = ["devtools"] }
+tauri-plugin-dialog = "2"
+tauri-plugin-fs = "2"
+compile-core = { path = "../../../crates/compile-core" }
+serde = { workspace = true }
+serde_json = { workspace = true }
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }

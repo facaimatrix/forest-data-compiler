@@ -1,0 +1,4 @@
+PlotID,TreeID,YR,PrevYR,Status,DBH,Species,Latitude,Longitude,PA,TreeH,AGB,Country
+A1,T1,2020,,0,12.5,Ocotea sp.,-3.1,-60.0,1.0,18.2,0.15,Brazil
+A1,T1,2024,2020,0,13.1,Ocotea sp.,-3.1,-60.0,1.0,19.0,0.17,Brazil
+A1,T2,2024,,2,8.0,Inga sp.,-3.1,-60.0,1.0,12.0,0.05,Brazil

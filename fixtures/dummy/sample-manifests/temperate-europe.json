@@ -1,0 +1,60 @@
+{
+  "schema": "forest-data-exchange.compile_manifest",
+  "version": 1,
+  "generated_at": "2026-08-18T00:00:00.000Z",
+  "notes": [
+    "Dummy manifest for testing plot filters against data/dummy-plots."
+  ],
+  "project": {
+    "id": "temperate-europe",
+    "title": "Temperate Europe",
+    "status": "approved",
+    "pi_email": "pi@example.org",
+    "pi_name": "Test PI",
+    "census_frequency": "single",
+    "board_deadline": null
+  },
+  "requirements": {
+    "guaranteed_fields": [
+      "DBH",
+      "Year",
+      "PlotID",
+      "Latitude (plot)",
+      "Longitude (plot)"
+    ],
+    "mandatory_attributes": [],
+    "ideal_attributes": [],
+    "mandatory_map_products": [],
+    "ideal_map_products": [],
+    "geography": {
+      "scope": "continental",
+      "continents": [
+        "Europe"
+      ],
+      "ecoregions": [],
+      "countries": [],
+      "extent_shapefile_path": null,
+      "extent_shapefile_name": null
+    },
+    "forest_types": [
+      "Temperate",
+      "Deciduous",
+      "Mixed"
+    ],
+    "year_range": {
+      "year_start": 2000,
+      "year_end": "present"
+    }
+  },
+  "matching_rules": {
+    "dataset_must_have_all_mandatory_attributes": false,
+    "geography": "filter dummy plots by geography in this JSON",
+    "year_range": "filter plots.year",
+    "forest_types": "if not All, keep plots matching at least one selected forest type"
+  },
+  "registered_datasets": {
+    "suitable": [],
+    "joined_owner_emails": [],
+    "pending_owner_emails": []
+  }
+}

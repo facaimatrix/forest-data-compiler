@@ -1,0 +1,30 @@
+{
+  "project_id": "sample-proposal-001",
+  "project_title": "Sample Amazon Height Study",
+  "compiled_at": "2026-08-18T16:20:02.690915500+00:00",
+  "output_path": "C:\\Users\\fcori\\Desktop\\FACAI\\apps\\forest-data-compiler\\fixtures\\data\\forest-data-exchange-compiled-sample-amazon-height-study-sample-p-20260818.csv",
+  "format": "csv",
+  "source_count": 2,
+  "total_rows": 5,
+  "sources": [
+    {
+      "path": "C:\\Users\\fcori\\Desktop\\FACAI\\apps\\forest-data-compiler\\fixtures\\data\\Amazon_PlotA_GFB3.csv",
+      "file_name": "Amazon_PlotA_GFB3.csv",
+      "rows": 3,
+      "columns": 14
+    },
+    {
+      "path": "C:\\Users\\fcori\\Desktop\\FACAI\\apps\\forest-data-compiler\\fixtures\\data\\Amazon_PlotB_GFB3.csv",
+      "file_name": "Amazon_PlotB_GFB3.csv",
+      "rows": 2,
+      "columns": 13
+    }
+  ],
+  "notes": [
+    "Compiled for Forest Data Exchange project 'Sample Amazon Height Study' (sample-proposal-001)",
+    "Geography filter: Global (no row filter)",
+    "Amazon_PlotA_GFB3.csv: No continent column found; project continent filter could not be applied",
+    "Amazon_PlotB_GFB3.csv: No continent column found; project continent filter could not be applied",
+    "Merged 5 rows from 2 source file(s)."
+  ]
+}

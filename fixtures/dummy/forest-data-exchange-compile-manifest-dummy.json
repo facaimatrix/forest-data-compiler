@@ -1,0 +1,111 @@
+{
+  "schema": "forest-data-exchange.compile_manifest",
+  "version": 1,
+  "generated_at": "2026-08-18T12:00:00.000Z",
+  "notes": [
+    "Dummy project-requirements JSON for desktop compile tests.",
+    "Filter local GFB3 files / dummy plots against requirements.geography, forest_types, and year_range.",
+    "Mandatory attributes are hard filters. Ideal attributes and map products are optional outputs.",
+    "Paired dummy data: data/dummy-plots/plots.sqlite and DummyNetwork_GFB3.csv."
+  ],
+  "project": {
+    "id": "dummy-proposal-001",
+    "title": "Tropical biomass and mangrove structure across Brazil and Southeast Asia",
+    "status": "approved",
+    "pi_email": "pi@example.org",
+    "pi_name": "Ada Rivera",
+    "census_frequency": "single",
+    "board_deadline": null
+  },
+  "requirements": {
+    "guaranteed_fields": [
+      "DBH",
+      "Year",
+      "PlotID",
+      "Latitude (plot)",
+      "Longitude (plot)"
+    ],
+    "mandatory_attributes": [
+      {
+        "key": "tree_height",
+        "label": "Tree Height",
+        "dataset_flag": "has_tree_height"
+      }
+    ],
+    "ideal_attributes": [
+      {
+        "key": "agb",
+        "label": "Aboveground Biomass (AGB)",
+        "dataset_flag": "has_agb"
+      }
+    ],
+    "mandatory_map_products": [
+      {
+        "key": "aboveground_biomass_map",
+        "label": "Aboveground biomass map"
+      }
+    ],
+    "ideal_map_products": [
+      {
+        "key": "forest_tree_species_richness_map",
+        "label": "Forest tree species richness map"
+      }
+    ],
+    "geography": {
+      "scope": "countries",
+      "continents": [],
+      "ecoregions": [],
+      "countries": [
+        "Brazil",
+        "Indonesia",
+        "Malaysia"
+      ],
+      "extent_shapefile_path": null,
+      "extent_shapefile_name": null
+    },
+    "forest_types": [
+      "Tropical",
+      "Mangrove"
+    ],
+    "year_range": {
+      "year_start": 1950,
+      "year_end": "present"
+    }
+  },
+  "matching_rules": {
+    "dataset_must_have_all_mandatory_attributes": true,
+    "geography": "filter local plots/files to selected countries (desktop GIS / metadata)",
+    "year_range": "filter GFB3 Year to requirements.year_range.start through end (end \"present\" = no upper bound)",
+    "forest_types": "if not All, keep plots/files matching at least one selected forest type",
+    "ideal_attributes_are_optional": true,
+    "map_products_are_outputs": true
+  },
+  "registered_datasets": {
+    "suitable": [
+      {
+        "id": "dummy-ds-1",
+        "file_name": "DummyNetwork_GFB3.csv",
+        "contributor_email": "owner1@example.org",
+        "contributor_name": "Dummy Network",
+        "continent": "South America",
+        "ecoregion": "Tropical moist broadleaf forests",
+        "num_plots": 518,
+        "attributes": {
+          "tree_height": true,
+          "agb": true,
+          "wood_density": false,
+          "crown_diameter": false,
+          "mortality": false,
+          "recruitment": false,
+          "coordinates": false
+        }
+      }
+    ],
+    "joined_owner_emails": [
+      "owner1@example.org"
+    ],
+    "pending_owner_emails": [],
+    "compatible_plots": 518,
+    "join_percent": 100
+  }
+}

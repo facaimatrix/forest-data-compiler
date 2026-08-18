@@ -1,0 +1,32 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Forest Data Compiler — Forest Data Exchange</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <header>
+    <div class="header-brand">
+      <div>
+        <h1>Forest Data Compiler</h1>
+        <span>Offline compile for Forest Data Exchange projects</span>
+      </div>
+    </div>
+    <div id="step-pills" class="step-pills" aria-label="Steps"></div>
+  </header>
+
+  <div id="error-bar" hidden></div>
+
+  <main id="main"></main>
+
+  <div id="loading" hidden>
+    <div class="spinner"></div>
+    <span id="loading-msg">Working…</span>
+    <button type="button" class="btn cancel-btn" id="btn-cancel-loading">Hide overlay</button>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>

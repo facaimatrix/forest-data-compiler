@@ -1,0 +1,64 @@
+{
+  "schema": "forest-data-exchange.compile_manifest",
+  "version": 1,
+  "generated_at": "2026-08-11T15:00:00.000Z",
+  "notes": [
+    "Sample manifest for Forest Data Compiler smoke tests."
+  ],
+  "project": {
+    "id": "sample-proposal-001",
+    "title": "Sample Amazon Height Study",
+    "status": "approved",
+    "pi_email": "pi@example.org",
+    "pi_name": "Sample PI",
+    "census_frequency": null,
+    "board_deadline": null
+  },
+  "requirements": {
+    "guaranteed_fields": ["DBH", "Year", "PlotID", "Latitude (plot)", "Longitude (plot)"],
+    "mandatory_attributes": [
+      { "key": "tree_height", "label": "Tree Height", "dataset_flag": "has_tree_height" }
+    ],
+    "ideal_attributes": [
+      { "key": "agb", "label": "Aboveground Biomass (AGB)", "dataset_flag": "has_agb" }
+    ],
+    "geography": {
+      "scope": "continental",
+      "continents": ["South America"],
+      "ecoregions": []
+    }
+  },
+  "matching_rules": {
+    "dataset_must_have_all_mandatory_attributes": true,
+    "geography": "dataset.continent must be in requirements.geography.continents",
+    "ideal_attributes_are_optional": true
+  },
+  "registered_datasets": {
+    "suitable": [
+      {
+        "id": "ds-1",
+        "file_name": "Amazon_PlotA_GFB3.csv",
+        "contributor_email": "owner1@example.org",
+        "contributor_name": "Owner One",
+        "continent": "South America",
+        "ecoregion": null,
+        "num_plots": 3,
+        "attributes": { "tree_height": true, "agb": true, "wood_density": false, "crown_diameter": false, "mortality": false, "recruitment": false, "coordinates": false }
+      },
+      {
+        "id": "ds-2",
+        "file_name": "Amazon_PlotB_GFB3.csv",
+        "contributor_email": "owner2@example.org",
+        "contributor_name": "Owner Two",
+        "continent": "South America",
+        "ecoregion": null,
+        "num_plots": 2,
+        "attributes": { "tree_height": true, "agb": false, "wood_density": false, "crown_diameter": false, "mortality": false, "recruitment": false, "coordinates": false }
+      }
+    ],
+    "joined_owner_emails": ["owner1@example.org"],
+    "pending_owner_emails": ["owner2@example.org"],
+    "compatible_plots": 5,
+    "join_percent": 50
+  }
+}
