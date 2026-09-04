@@ -159,6 +159,69 @@ mod tests {
     }
 
     #[test]
+    fn infers_and_writes_dataset_metadata_sidecar() {
+        use crate::dataset_metadata::{
+            inspect_file, sidecar_path, write_sidecars, DatasetMetadata, SCHEMA, WriteOptions,
+        };
+
+        let csv = dummy_root().join("DummyNetwork_GFB3.csv");
+        let inspect = inspect_file(&csv).unwrap();
+        let meta = &inspect.metadata;
+        assert_eq!(meta.schema, SCHEMA);
+        assert!(meta.source.looks_like_gfb3);
+        assert_eq!(meta.attributes.get("tree_height"), Some(&true));
+        assert_eq!(meta.attributes.get("agb"), Some(&true));
+        assert!(meta.geography.countries.iter().any(|c| c == "Brazil"));
+        assert!(meta.geography.countries.iter().any(|c| c == "Indonesia"));
+        assert!(meta.forest_types.iter().any(|f| f == "Tropical"));
+        assert!(meta.forest_types.iter().any(|f| f == "Mangrove"));
+        let years = meta.year_range.as_ref().expect("year range");
+        assert_eq!(years.year_start, Some(1930));
+        assert_eq!(years.year_end, Some(2024));
+        assert_eq!(meta.num_plots, Some(518));
+
+        let dest = std::env::temp_dir().join("fdc-meta-DummyNetwork_GFB3.csv");
+        std::fs::write(&dest, std::fs::read(&csv).unwrap()).unwrap();
+        let mut copy = meta.clone();
+        copy.source.path = dest.display().to_string();
+        copy.source.file_name = "fdc-meta-DummyNetwork_GFB3.csv".into();
+        copy.coauthors = vec![crate::dataset_metadata::Coauthor {
+            author_name: "Ada Rivera".into(),
+            author_email: Some("ada@example.org".into()),
+            role: "co_author".into(),
+            author_order: Some(2),
+            affiliation: Some("Example Lab".into()),
+        }];
+        let report = write_sidecars(
+            &[copy],
+            &WriteOptions {
+                overwrite: true,
+                contributor_email: Some("owner1@example.org".into()),
+                contributor_name: Some("Dummy Network".into()),
+            },
+        )
+        .unwrap();
+        assert_eq!(report.written.len(), 1);
+        let loaded = DatasetMetadata::from_path(&sidecar_path(&dest)).unwrap();
+        assert_eq!(loaded.contributor_email.as_deref(), Some("owner1@example.org"));
+        assert!(loaded.geography.countries.contains(&"Brazil".to_string()));
+        assert_eq!(loaded.coauthors.len(), 2);
+        assert_eq!(loaded.coauthors[0].author_name, "Dummy Network");
+        assert_eq!(loaded.coauthors[0].role, "corresponding");
+        assert_eq!(loaded.coauthors[1].author_name, "Ada Rivera");
+        assert_eq!(loaded.coauthors[1].author_email.as_deref(), Some("ada@example.org"));
+
+        let reloaded = inspect_file(&dest).unwrap().metadata;
+        assert_eq!(reloaded.coauthors.len(), 2);
+        assert_eq!(reloaded.coauthors[1].affiliation.as_deref(), Some("Example Lab"));
+
+        let directory = crate::dataset_metadata::build_author_directory(&[reloaded]);
+        assert_eq!(directory.people.len(), 2);
+        let _ = std::fs::remove_file(&dest);
+        let _ = std::fs::remove_file(sidecar_path(&dest));
+    }
+
+    #[test]
     fn absent_forest_type_compiles_to_nothing() {
         let manifest = dummy_manifest("plantation-empty.json");
         let out = std::env::temp_dir().join("fdc-test-plantation.csv");

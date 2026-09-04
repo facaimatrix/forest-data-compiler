@@ -1,4 +1,5 @@
 use crate::attributes::{detect_attributes, ideal_score, looks_like_gfb3};
+use crate::dataset_metadata::{load_alongside, DatasetMetadata};
 use crate::geo::{
     GeoFilter, GeoMode, BIOREGIONS, BIOREGION_COLUMNS, COUNTRY_COLUMNS,
 };
@@ -26,6 +27,7 @@ pub struct MatchOptions {
 #[serde(rename_all = "snake_case")]
 pub enum MatchReason {
     RegisteredName,
+    SidecarMetadata,
     ColumnAttributes,
 }
 
@@ -110,25 +112,11 @@ pub fn match_folder(
             .unwrap_or("")
             .to_string();
 
-        let registered = find_registered(&file_name, suitable).map(|ds| {
-            let email = ds
-                .contributor_email
-                .as_deref()
-                .map(|e| e.trim().to_lowercase())
-                .unwrap_or_default();
-            let owner_joined = !email.is_empty() && joined.contains(&email);
-            RegisteredHit {
-                id: ds.id.clone(),
-                file_name: ds.file_name.clone(),
-                contributor_email: ds.contributor_email.clone(),
-                contributor_name: ds.contributor_name.clone(),
-                continent: ds.continent.clone(),
-                ecoregion: ds.ecoregion.clone(),
-                num_plots: ds.num_plots,
-                owner_joined,
-                attributes: ds.attributes.clone(),
-            }
-        });
+        let sidecar = load_alongside(&path);
+        let from_manifest = find_registered(&file_name, suitable);
+        let registered = from_manifest
+            .map(|ds| registered_hit_from_dataset(ds, &joined))
+            .or_else(|| sidecar.as_ref().map(|m| registered_hit_from_sidecar(m, &joined)));
 
         if registered.is_none() && !opts.include_unregistered {
             continue;
@@ -136,7 +124,15 @@ pub fn match_folder(
 
         if let Some(ref hit) = registered {
             if opts.joined_owners_only && !hit.owner_joined {
-                continue;
+                let sidecar_unknown = from_manifest.is_none()
+                    && sidecar
+                        .as_ref()
+                        .and_then(|m| m.contributor_email.as_deref())
+                        .map(|e| e.trim().is_empty())
+                        .unwrap_or(true);
+                if !sidecar_unknown {
+                    continue;
+                }
             }
         }
 
@@ -204,6 +200,18 @@ pub fn match_folder(
                 for f in &forest_types_found {
                     all_forest_types.insert(f.clone());
                 }
+            }
+        }
+
+        if let Some(ref meta) = sidecar {
+            merge_unique(&mut countries_found, &meta.geography.countries);
+            merge_unique(&mut bioregions_found, &meta.geography.ecoregions);
+            merge_unique(&mut forest_types_found, &meta.forest_types);
+            for c in &countries_found {
+                all_countries.insert(c.clone());
+            }
+            for f in &forest_types_found {
+                all_forest_types.insert(f.clone());
             }
         }
 
@@ -294,8 +302,10 @@ pub fn match_folder(
             warnings.push("Does not look like a GFB3 tree table".into());
         }
 
-        let reason = if registered.is_some() {
+        let reason = if from_manifest.is_some() {
             MatchReason::RegisteredName
+        } else if sidecar.is_some() {
+            MatchReason::SidecarMetadata
         } else {
             MatchReason::ColumnAttributes
         };
@@ -371,7 +381,7 @@ pub fn match_folder(
     })
 }
 
-fn list_data_files(folder: &Path, recursive: bool) -> Result<Vec<PathBuf>, String> {
+pub fn list_data_files(folder: &Path, recursive: bool) -> Result<Vec<PathBuf>, String> {
     let mut out = Vec::new();
     if recursive {
         for entry in walkdir(folder)? {
@@ -409,6 +419,64 @@ fn walkdir(root: &Path) -> Result<Vec<PathBuf>, String> {
         }
     }
     Ok(files)
+}
+
+fn registered_hit_from_dataset(
+    ds: &RegisteredDataset,
+    joined: &std::collections::HashSet<String>,
+) -> RegisteredHit {
+    let email = ds
+        .contributor_email
+        .as_deref()
+        .map(|e| e.trim().to_lowercase())
+        .unwrap_or_default();
+    let owner_joined = !email.is_empty() && joined.contains(&email);
+    RegisteredHit {
+        id: ds.id.clone(),
+        file_name: ds.file_name.clone(),
+        contributor_email: ds.contributor_email.clone(),
+        contributor_name: ds.contributor_name.clone(),
+        continent: ds.continent.clone(),
+        ecoregion: ds.ecoregion.clone(),
+        num_plots: ds.num_plots,
+        owner_joined,
+        attributes: ds.attributes.clone(),
+    }
+}
+
+fn registered_hit_from_sidecar(
+    meta: &DatasetMetadata,
+    joined: &std::collections::HashSet<String>,
+) -> RegisteredHit {
+    let email = meta
+        .contributor_email
+        .as_deref()
+        .map(|e| e.trim().to_lowercase())
+        .unwrap_or_default();
+    let owner_joined = !email.is_empty() && joined.contains(&email);
+    RegisteredHit {
+        id: format!("sidecar:{}", meta.source.file_name),
+        file_name: meta.source.file_name.clone(),
+        contributor_email: meta.contributor_email.clone(),
+        contributor_name: meta.contributor_name.clone(),
+        continent: meta.continent_hint().map(|s| s.to_string()),
+        ecoregion: meta.ecoregion_hint().map(|s| s.to_string()),
+        num_plots: meta.num_plots.map(|n| n as f64),
+        owner_joined,
+        attributes: meta.attributes.clone(),
+    }
+}
+
+fn merge_unique(target: &mut Vec<String>, extra: &[String]) {
+    for item in extra {
+        let t = item.trim();
+        if t.is_empty() {
+            continue;
+        }
+        if !target.iter().any(|x| x.eq_ignore_ascii_case(t)) {
+            target.push(t.to_string());
+        }
+    }
 }
 
 fn find_registered<'a>(

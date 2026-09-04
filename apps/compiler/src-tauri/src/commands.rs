@@ -1,6 +1,10 @@
 use compile_core::compile::{
     compile_files, default_output_name, CompileFormat, CompileOptions, CompileReport,
 };
+use compile_core::dataset_metadata::{
+    inspect_folder, write_author_directory, write_sidecars, DatasetMetadata, MetadataInspect,
+    WriteOptions, WriteReport,
+};
 use compile_core::geo::{GeoFilter, GeoMode, BIOREGIONS};
 use compile_core::manifest::{AttributeReq, CompileManifest, ManifestScope};
 use compile_core::match_files::{match_folder, CandidateFile, MatchOptions};
@@ -246,6 +250,65 @@ pub async fn suggest_output_name(
     tauri::async_runtime::spawn_blocking(move || {
         let f = parse_format(&format)?;
         Ok(default_output_name(&manifest, f))
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
+#[derive(Debug, Deserialize)]
+pub struct InspectMetadataInput {
+    pub folder: String,
+    pub recursive: bool,
+}
+
+#[command]
+pub async fn inspect_folder_metadata(
+    input: InspectMetadataInput,
+) -> Result<Vec<MetadataInspect>, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        inspect_folder(&PathBuf::from(&input.folder), input.recursive)
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
+#[derive(Debug, Deserialize)]
+pub struct WriteMetadataInput {
+    pub items: Vec<DatasetMetadata>,
+    #[serde(default)]
+    pub overwrite: bool,
+    #[serde(default)]
+    pub contributor_email: Option<String>,
+    #[serde(default)]
+    pub contributor_name: Option<String>,
+}
+
+#[command]
+pub async fn write_dataset_metadata(input: WriteMetadataInput) -> Result<WriteReport, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        write_sidecars(
+            &input.items,
+            &WriteOptions {
+                overwrite: input.overwrite,
+                contributor_email: input.contributor_email,
+                contributor_name: input.contributor_name,
+            },
+        )
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
+#[derive(Debug, Deserialize)]
+pub struct AuthorDirectoryInput {
+    pub items: Vec<DatasetMetadata>,
+    pub output_path: String,
+}
+
+#[command]
+pub async fn export_author_directory(input: AuthorDirectoryInput) -> Result<String, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        write_author_directory(&input.items, &PathBuf::from(&input.output_path))
     })
     .await
     .map_err(|e| e.to_string())?

@@ -6,6 +6,7 @@
 
 pub mod attributes;
 pub mod compile;
+pub mod dataset_metadata;
 pub mod geo;
 pub mod manifest;
 pub mod match_files;
@@ -17,6 +18,11 @@ mod tests_integration;
 
 pub use attributes::{detect_attributes, ATTRIBUTE_SYNONYMS};
 pub use compile::{compile_files, CompileFormat, CompileOptions, CompileReport};
+pub use dataset_metadata::{
+    inspect_file, inspect_folder, sidecar_path, write_author_directory, write_sidecars, Coauthor,
+    DatasetMetadata, MetadataInspect, WriteOptions, WriteReport,
+    SCHEMA as DATASET_METADATA_SCHEMA,
+};
 pub use geo::{GeoFilter, GeoMode, BIOREGIONS};
 pub use manifest::{CompileManifest, ManifestScope, RegisteredDataset, LEGACY_SCHEMA, SCHEMA};
 pub use match_files::{match_folder, CandidateFile, MatchOptions, MatchReason, ScanBundle};

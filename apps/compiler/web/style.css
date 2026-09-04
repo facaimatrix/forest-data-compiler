@@ -43,6 +43,7 @@ header {
   display: flex;
   align-items: center;
   justify-content: space-between;
+  flex-wrap: wrap;
   gap: 1rem;
   box-shadow: 0 1px 4px rgba(0, 0, 0, 0.2);
   position: sticky;
@@ -69,10 +70,37 @@ header {
   opacity: 0.8;
 }
 
-.step-pills {
+.mode-tabs {
   display: flex;
   gap: 0.35rem;
   flex-shrink: 0;
+}
+
+.mode-tab {
+  appearance: none;
+  border: 1px solid rgba(255, 255, 255, 0.35);
+  background: transparent;
+  color: #fff;
+  font: inherit;
+  font-size: 0.78rem;
+  font-weight: 600;
+  padding: 0.35rem 0.7rem;
+  border-radius: 999px;
+  cursor: pointer;
+}
+
+.mode-tab.active {
+  background: #fff;
+  color: var(--green-dark);
+  border-color: #fff;
+}
+
+.step-pills {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  flex-shrink: 0;
+  justify-content: flex-end;
 }
 
 .step-pill {
@@ -325,12 +353,37 @@ table.files tr:hover td { background: #f9fbfa; }
   flex-wrap: wrap;
 }
 
-.select {
+.select,
+input[type="text"] {
   font: inherit;
   padding: 0.45rem 0.6rem;
   border: 1px solid var(--border);
   border-radius: 6px;
   background: #fff;
+  width: 100%;
+  margin-top: 0.25rem;
+}
+
+.table-wrap {
+  overflow: auto;
+}
+
+.author-box {
+  margin: 0.2rem 0 0.8rem;
+  padding: 0.75rem 0.85rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: #f7faf8;
+}
+
+.author-table input[type="text"],
+.author-table .select {
+  margin-top: 0;
+}
+
+tr.author-row td {
+  background: #f7faf8;
+  border-bottom: 1px solid var(--border);
 }
 
 .success-box {

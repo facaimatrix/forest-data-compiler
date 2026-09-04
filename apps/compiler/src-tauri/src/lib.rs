@@ -1,6 +1,9 @@
 mod commands;
 
-use commands::{compile_selection, load_manifest, scan_folder, suggest_output_name};
+use commands::{
+    compile_selection, export_author_directory, inspect_folder_metadata, load_manifest,
+    scan_folder, suggest_output_name, write_dataset_metadata,
+};
 
 pub fn run() {
     tauri::Builder::default()
@@ -11,6 +14,9 @@ pub fn run() {
             scan_folder,
             compile_selection,
             suggest_output_name,
+            inspect_folder_metadata,
+            write_dataset_metadata,
+            export_author_directory,
         ])
         .run(tauri::generate_context!())
         .expect("error while running Forest Data Compiler");

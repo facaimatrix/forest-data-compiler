@@ -50,6 +50,24 @@ accepted so older exports keep working.
 Custom extent shapefiles and map products are reported in the UI but not enforced: the compiler
 does no GIS work, so use the country or bioregion filter for shapefile-scoped projects.
 
+## Dataset metadata (legacy ingest)
+
+GFB3 files that entered the archive before Forest Data Exchange have no website
+`data_files` record and no sidecar. In the app, switch to **Dataset metadata**,
+pick the folder, and write `{stem}.metadata.json` next to each table.
+
+Each sidecar uses `schema: "forest-data-exchange.dataset_metadata"` and records
+the same fields the website stores on a dataset: attribute flags, countries /
+continents / ecoregions, forest types, census year window, and plot / tree
+counts. Contributor name and email are optional (they are not in the table). Each
+sidecar also holds a `coauthors` list (`author_name`, `author_email`,
+`affiliation`, `role`, `author_order`) that you edit per dataset. Roles match
+the website (`corresponding` / `co_author`). **Export author directory…** writes
+a de-duplicated contact/publication list across the selected files.
+
+The compile matcher reads these sidecars so a backfilled file can be selected
+even when it is missing from a project manifest's `registered_datasets`.
+
 ## Fixtures
 
 - `fixtures/sample-manifest.json` + `fixtures/data/` — smoke tests.
