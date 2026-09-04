@@ -472,6 +472,80 @@ fn shape_to_multipolygon(shape: shapefile::Shape) -> Option<MultiPolygon<f64>> {
     }
 }
 
+/// Polygon shapefile used as a project extent: keep plots whose lat/lon fall inside.
+#[derive(Debug, Clone)]
+pub struct ExtentMap {
+    pub path: PathBuf,
+    polys: Vec<ExtentPoly>,
+}
+
+#[derive(Debug, Clone)]
+struct ExtentPoly {
+    min_x: f64,
+    min_y: f64,
+    max_x: f64,
+    max_y: f64,
+    geom: MultiPolygon<f64>,
+}
+
+impl ExtentMap {
+    pub fn from_path(path: &Path) -> Result<Self, String> {
+        let path = normalize_layer_path(path)
+            .filter(|p| is_shapefile(p))
+            .ok_or_else(|| {
+                format!(
+                    "Reference extent must be a shapefile (.shp): {}",
+                    path.display()
+                )
+            })?;
+        let mut reader = shapefile::Reader::from_path(&path).map_err(|e| e.to_string())?;
+        let mut polys = Vec::new();
+        for item in reader.iter_shapes_and_records() {
+            let Ok((shape, _)) = item else {
+                continue;
+            };
+            let Some(geom) = shape_to_multipolygon(shape) else {
+                continue;
+            };
+            let Some(rect) = geom.bounding_rect() else {
+                continue;
+            };
+            polys.push(ExtentPoly {
+                min_x: rect.min().x,
+                min_y: rect.min().y,
+                max_x: rect.max().x,
+                max_y: rect.max().y,
+                geom,
+            });
+        }
+        if polys.is_empty() {
+            return Err(format!("No polygons found in {}", path.display()));
+        }
+        Ok(Self { path, polys })
+    }
+
+    pub fn contains(&self, lat: f64, lon: f64) -> bool {
+        if !lat.is_finite() || !lon.is_finite() {
+            return false;
+        }
+        let pt = GeoPoint::new(lon, lat);
+        self.polys.iter().any(|p| {
+            lon >= p.min_x
+                && lon <= p.max_x
+                && lat >= p.min_y
+                && lat <= p.max_y
+                && p.geom.contains(&pt)
+        })
+    }
+
+    pub fn count_inside(&self, points: &[(f64, f64)]) -> usize {
+        points
+            .iter()
+            .filter(|(lat, lon)| self.contains(*lat, *lon))
+            .count()
+    }
+}
+
 fn record_token(record: &shapefile::dbase::Record, preferred: &[&str]) -> Option<String> {
     for name in preferred {
         if let Some(value) = record.get(*name).or_else(|| {

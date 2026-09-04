@@ -14,9 +14,10 @@ const state = {
   format: 'auto',
   addSourceColumn: true,
   lastReport: null,
-  geoMode: 'global', // global | bioregions | by_country
+  geoMode: 'global', // global | bioregions | by_country | shapefile
   selectedBioregions: [],
   selectedCountries: [],
+  extentShapefile: null,
   discoveredCountries: [],
   discoveredForestTypes: [],
   bioregionOptions: [],
@@ -36,7 +37,7 @@ const state = {
 };
 
 const STEPS = [
-  { id: 1, label: '1. Manifest' },
+  { id: 1, label: '1. Project requisites' },
   { id: 2, label: '2. Folder' },
   { id: 3, label: '3. Compile' },
 ];
@@ -197,6 +198,7 @@ function geoPayload() {
     geo_mode: state.geoMode,
     bioregions: state.geoMode === 'bioregions' ? state.selectedBioregions : [],
     countries: state.geoMode === 'by_country' ? state.selectedCountries : [],
+    shapefile_path: state.geoMode === 'shapefile' ? state.extentShapefile || null : null,
   };
 }
 
@@ -239,10 +241,21 @@ function authorSummary(m) {
 
 function layerLabel(path, emptyText) {
   if (!path) return emptyText;
-  const name = String(path).replace(/\\/g, '/').split('/').pop();
+  const name = baseName(path);
   const ext = (name.split('.').pop() || '').toLowerCase();
   const kind = ext === 'shp' ? 'shapefile' : (ext === 'tif' || ext === 'tiff' ? 'GeoTIFF' : 'layer');
   return `${name} (${kind})`;
+}
+
+function baseName(path) {
+  if (!path) return '';
+  return String(path).replace(/\\/g, '/').split('/').pop() || path;
+}
+
+function datasetsInsideExtent() {
+  return (state.candidates || []).filter(
+    (c) => c.plots_in_extent != null && Number(c.plots_in_extent) > 0,
+  );
 }
 
 function layerFilters() {
@@ -518,9 +531,9 @@ function viewManifest() {
   const s = state.summary;
   return `
     <section class="panel">
-      <h2>Load compile manifest</h2>
+      <h2>Load project requisites</h2>
       <p class="lede">
-        Download the requirements JSON from Forest Data Exchange Admin → Compiled Data
+        Download the project requisites JSON from Forest Data Exchange Admin → Compiled Data
         (named <code>forest-data-exchange-compile-manifest-…json</code>), then open it here.
         The app uses it to filter local GFB3 files for this project.
       </p>
@@ -637,6 +650,22 @@ function geoFilterHtml() {
         : `<p class="tiny">No Country values found yet. Scan a folder of GFB3 files that include a Country column, then select countries here.</p>`
       : '';
 
+  const shpPicker =
+    state.geoMode === 'shapefile'
+      ? `<div class="geo-shp-row">
+          <button type="button" class="btn btn-secondary" id="btn-pick-extent">Choose shapefile…</button>
+          ${state.extentShapefile ? '<button type="button" class="btn btn-ghost" id="btn-clear-extent">Clear</button>' : ''}
+          <div class="path-box" title="${escapeHtml(state.extentShapefile || '')}">${escapeHtml(
+            state.extentShapefile ? baseName(state.extentShapefile) : 'No shapefile selected',
+          )}</div>
+        </div>
+        <p class="tiny" style="margin-top:.4rem">
+          Keep datasets whose plot Latitude / Longitude fall inside the polygons.
+          Keep .shx and .dbf beside the .shp. Coordinates must be WGS84.
+        </p>
+        ${extentDatasetListHtml()}`
+      : '';
+
   return `
     <div class="geo-box">
       <h3>Geographic filter</h3>
@@ -644,17 +673,40 @@ function geoFilterHtml() {
         <label><input type="radio" name="geo-mode" value="global" ${state.geoMode === 'global' ? 'checked' : ''}/> Global</label>
         <label><input type="radio" name="geo-mode" value="bioregions" ${state.geoMode === 'bioregions' ? 'checked' : ''}/> Bioregions</label>
         <label><input type="radio" name="geo-mode" value="by_country" ${state.geoMode === 'by_country' ? 'checked' : ''}/> By country</label>
+        <label><input type="radio" name="geo-mode" value="shapefile" ${state.geoMode === 'shapefile' ? 'checked' : ''}/> Reference shapefile</label>
       </div>
       ${bioList}
       ${countryList}
+      ${shpPicker}
       <p class="tiny" style="margin-top:.5rem">
-        Applied when matching files and when merging rows (Country / Bioregion–Ecoregion columns).
-        This narrows further; the project scope from the manifest${
+        Applied when matching files and when merging rows (Country / Bioregion–Ecoregion columns, or Latitude/Longitude vs a shapefile).
+        This narrows further; the project scope from the project requisites${
           state.summary ? ` (${escapeHtml(manifestGeographyLabel(state.summary))})` : ''
         } always applies.
       </p>
     </div>
   `;
+}
+
+function extentDatasetListHtml() {
+  if (state.geoMode !== 'shapefile' || !state.extentShapefile || !state.folder) return '';
+  const inside = datasetsInsideExtent();
+  if (!inside.length) {
+    return '<p class="tiny" style="margin-top:.5rem"><strong>Datasets inside extent:</strong> none</p>';
+  }
+  return `<div style="margin-top:.5rem">
+    <div class="tiny" style="font-weight:700">Datasets inside extent (${inside.length})</div>
+    <ul class="geo-names">
+      ${inside
+        .map(
+          (c) =>
+            `<li>${escapeHtml(c.file_name)} <span class="tiny">(${c.plots_in_extent} plot location${
+              Number(c.plots_in_extent) === 1 ? '' : 's'
+            })</span></li>`,
+        )
+        .join('')}
+    </ul>
+  </div>`;
 }
 
 function viewFolder() {
@@ -664,7 +716,7 @@ function viewFolder() {
       <h2>Select local GFB3 folder</h2>
       <p class="lede">
         Point at the folder where contributor tree-level files live. Matching uses
-        registered dataset names from the manifest, then checks mandatory attributes and geography.
+        registered dataset names from the project requisites, then checks mandatory attributes and geography.
       </p>
       <div class="row">
         <button type="button" class="btn btn-primary" id="btn-pick-folder">Choose folder…</button>
@@ -734,6 +786,11 @@ function candidateRow(c, i) {
   if (c.countries_found?.length) geoBits.push(`Countries: ${c.countries_found.join(', ')}`);
   if (c.bioregions_found?.length) geoBits.push(`Bioregions: ${c.bioregions_found.join(', ')}`);
   if (c.forest_types_found?.length) geoBits.push(`Forest types: ${c.forest_types_found.join(', ')}`);
+  if (c.plots_in_extent != null) {
+    geoBits.push(
+      `${c.plots_in_extent} plot location${Number(c.plots_in_extent) === 1 ? '' : 's'} inside shapefile`,
+    );
+  }
   const notes = [
     ...geoBits,
     ...(c.warnings || []),
@@ -765,7 +822,9 @@ function viewCompile() {
       ? `Bioregions (${state.selectedBioregions.length ? state.selectedBioregions.join(', ') : 'any'})`
       : state.geoMode === 'by_country'
         ? `By country (${state.selectedCountries.length ? state.selectedCountries.join(', ') : 'any'})`
-        : 'Global';
+        : state.geoMode === 'shapefile'
+          ? `Reference shapefile (${baseName(state.extentShapefile) || 'none'})`
+          : 'Global';
   return `
     <section class="panel">
       <h2>Compile dataset</h2>
@@ -804,6 +863,13 @@ function viewCompile() {
                  ${report.source_count} source(s) · ${report.total_rows} rows · format ${escapeHtml(report.format)}
                  · report: ${escapeHtml(report.output_path)}.compile-report.json
                </div>
+               ${
+                 (report.sources || []).length
+                   ? `<div class="tiny" style="margin-top:.35rem">Datasets: ${(report.sources || [])
+                       .map((s) => escapeHtml(s.file_name))
+                       .join(', ')}</div>`
+                   : ''
+               }
              </div>`
           : ''
       }
@@ -1195,9 +1261,9 @@ function bindStepHandlers() {
     pickManifest.addEventListener('click', async () => {
       try {
         showError(null);
-        const path = await openFile([{ name: 'Compile Manifest', extensions: ['json'] }]);
+        const path = await openFile([{ name: 'Project requisites', extensions: ['json'] }]);
         if (!path) return;
-        setLoading(true, 'Loading manifest…');
+        setLoading(true, 'Loading project requisites…');
         const summary = await invoke('load_manifest', { path });
         state.manifestPath = summary.path;
         state.summary = summary;
@@ -1209,7 +1275,9 @@ function bindStepHandlers() {
         state.selectedCountries = [...(summary.countries || [])];
         state.discoveredCountries = [...(summary.countries || [])];
         state.discoveredForestTypes = [];
-        state.geoMode = 'global';
+        const scope = (summary.geography_scope || '').toLowerCase();
+        state.geoMode =
+          scope === 'shapefile' || scope === 'extent' || scope === 'custom' ? 'shapefile' : 'global';
         state.candidates = [];
         state.folder = null;
         state.lastReport = null;
@@ -1243,6 +1311,10 @@ function bindStepHandlers() {
 
   const rescan = async () => {
     if (!state.folder || !state.manifest) return;
+    if (state.geoMode === 'shapefile' && !state.extentShapefile) {
+      showError('Choose a reference shapefile to select plots by Latitude/Longitude');
+      return;
+    }
     try {
       showError(null);
       setLoading(true, 'Scanning folder…');
@@ -1290,8 +1362,27 @@ function bindStepHandlers() {
     radio.addEventListener('change', async () => {
       state.geoMode = radio.value;
       render();
+      if (state.geoMode === 'shapefile' && !state.extentShapefile) return;
       if (state.folder) await rescan();
     });
+  });
+
+  $('btn-pick-extent')?.addEventListener('click', async () => {
+    try {
+      const path = await openFile([{ name: 'Shapefile', extensions: ['shp'] }]);
+      if (!path) return;
+      state.extentShapefile = path;
+      state.geoMode = 'shapefile';
+      render();
+      if (state.folder) await rescan();
+    } catch (e) {
+      showError(String(e?.message || e));
+    }
+  });
+  $('btn-clear-extent')?.addEventListener('click', async () => {
+    state.extentShapefile = null;
+    render();
+    if (state.folder && state.geoMode !== 'shapefile') await rescan();
   });
 
   document.querySelectorAll('.bio-check').forEach((cb) => {

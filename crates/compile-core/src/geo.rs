@@ -21,6 +21,8 @@ pub enum GeoMode {
     Global,
     Bioregions,
     ByCountry,
+    /// Keep plots whose Latitude/Longitude fall inside a polygon shapefile.
+    Shapefile,
 }
 
 impl GeoMode {
@@ -28,6 +30,7 @@ impl GeoMode {
         match s.trim().to_lowercase().as_str() {
             "bioregions" | "bioregion" | "ecoregion" | "ecoregions" => Self::Bioregions,
             "by_country" | "country" | "countries" => Self::ByCountry,
+            "shapefile" | "extent" | "reference" => Self::Shapefile,
             _ => Self::Global,
         }
     }
@@ -37,6 +40,7 @@ impl GeoMode {
             Self::Global => "global",
             Self::Bioregions => "bioregions",
             Self::ByCountry => "by_country",
+            Self::Shapefile => "shapefile",
         }
     }
 }
@@ -50,6 +54,9 @@ pub struct GeoFilter {
     /// Selected country names when mode == ByCountry.
     #[serde(default)]
     pub countries: Vec<String>,
+    /// Local polygon shapefile when mode == Shapefile.
+    #[serde(default)]
+    pub shapefile_path: Option<String>,
 }
 
 impl GeoFilter {
@@ -85,12 +92,14 @@ impl GeoFilter {
                         .any(|sel| sel.eq_ignore_ascii_case(c.trim()))
                 })
             }
+            // File-level shapefile test uses plot coordinates in `match_folder`.
+            GeoMode::Shapefile => true,
         }
     }
 
     pub fn row_filter_column(&self) -> Option<(&'static str, &[String])> {
         match self.mode {
-            GeoMode::Global => None,
+            GeoMode::Global | GeoMode::Shapefile => None,
             GeoMode::Bioregions if !self.bioregions.is_empty() => {
                 Some(("__bioregion__", &self.bioregions))
             }

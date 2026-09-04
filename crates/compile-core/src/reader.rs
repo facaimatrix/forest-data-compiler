@@ -195,7 +195,7 @@ fn resolve_header(headers: &[String], candidates: &[&str]) -> Option<String> {
     })
 }
 
-fn parse_coord(v: AnyValue) -> Option<f64> {
+pub(crate) fn parse_coord(v: AnyValue) -> Option<f64> {
     let n = match v {
         AnyValue::Null => return None,
         AnyValue::Float64(n) => n,

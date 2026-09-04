@@ -43,12 +43,14 @@ accepted so older exports keep working.
 | Requirement | Where it comes from | How it is applied |
 | --- | --- | --- |
 | Mandatory attributes | `requirements.mandatory_attributes` | File-level screen; skipped when `matching_rules.dataset_must_have_all_mandatory_attributes` is false |
-| Geography | `requirements.geography` (`global`, `continental`, `ecoregion`, `countries`) | File-level screen plus row filter on Country / Continent / Bioregion columns |
+| Geography | `requirements.geography` (`global`, `continental`, `ecoregion`, `countries`) plus an optional local reference shapefile | File-level screen plus row filter on Country / Continent / Bioregion, or Latitude/Longitude inside the shapefile |
 | Forest types | `requirements.forest_types` (`All` = no filter) | File-level screen plus row filter on the ForestType column |
 | Census years | `requirements.year_range` (`year_end: "present"` = open ended) | Row filter on the YR / Year column |
 
-Custom extent shapefiles and map products are reported in the UI but not enforced: the compiler
-does no GIS work, so use the country or bioregion filter for shapefile-scoped projects.
+When a project uses a custom extent, pick a local copy of that shapefile under
+**Geographic filter → Reference shapefile**. Files with no plots inside are
+dropped; compile keeps only rows whose Latitude/Longitude fall in the polygons
+(WGS84). Map products are still listed but not produced here.
 
 ## Dataset metadata (legacy ingest)
 

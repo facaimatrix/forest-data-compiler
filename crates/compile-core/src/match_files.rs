@@ -5,7 +5,8 @@ use crate::geo::{
 };
 use crate::manifest::{CompileManifest, ManifestScope, RegisteredDataset};
 use crate::project_filter::FOREST_TYPE_COLUMNS;
-use crate::reader::{is_supported_extension, peek_column_uniques, peek_headers};
+use crate::raster_lookup::ExtentMap;
+use crate::reader::{is_supported_extension, peek_column_uniques, peek_coordinate_pairs, peek_headers};
 use serde::Serialize;
 use std::collections::{BTreeSet, HashMap};
 use std::path::{Path, PathBuf};
@@ -48,6 +49,8 @@ pub struct CandidateFile {
     pub countries_found: Vec<String>,
     pub bioregions_found: Vec<String>,
     pub forest_types_found: Vec<String>,
+    #[serde(default)]
+    pub plots_in_extent: Option<u64>,
     pub warnings: Vec<String>,
     pub error: Option<String>,
 }
@@ -104,6 +107,21 @@ pub fn match_folder(
     let enforce_mandatory = manifest
         .matching_rules
         .dataset_must_have_all_mandatory_attributes;
+
+    let extent = if opts.geo.mode == GeoMode::Shapefile {
+        let path = opts
+            .geo
+            .shapefile_path
+            .as_deref()
+            .map(str::trim)
+            .filter(|s| !s.is_empty())
+            .ok_or_else(|| {
+                "Choose a reference shapefile to select plots by Latitude/Longitude".to_string()
+            })?;
+        Some(ExtentMap::from_path(Path::new(path))?)
+    } else {
+        None
+    };
 
     for path in files {
         let file_name = path
@@ -246,12 +264,32 @@ pub fn match_folder(
             }
         };
 
-        // Desktop geo filter (Global / Bioregions / By country)
-        let filter_geo_ok = opts.geo.allows_file(
+        // Desktop geo filter (Global / Bioregions / By country / Shapefile)
+        let mut plots_in_extent = None;
+        let mut filter_geo_ok = opts.geo.allows_file(
             registered.as_ref().and_then(|r| r.ecoregion.as_deref()),
             &countries_found,
             &bioregions_found,
         );
+        if let Some(extent) = &extent {
+            let points = peek_coordinate_pairs(&path, 200_000).unwrap_or_default();
+            let n = extent.count_inside(&points) as u64;
+            plots_in_extent = Some(n);
+            if points.is_empty() {
+                filter_geo_ok = false;
+                warnings.push(
+                    "No Latitude/Longitude columns — cannot test plots against the shapefile"
+                        .into(),
+                );
+            } else if n == 0 {
+                filter_geo_ok = false;
+                warnings.push("No plots inside the reference shapefile".into());
+            } else {
+                warnings.push(format!(
+                    "{n} plot location(s) inside the reference shapefile"
+                ));
+            }
+        }
 
         let geography_ok = manifest_geo_ok && filter_geo_ok;
 
@@ -266,6 +304,7 @@ pub fn match_folder(
                 GeoMode::ByCountry => {
                     warnings.push("Does not match selected countries".into());
                 }
+                GeoMode::Shapefile => {}
                 GeoMode::Global => {}
             }
         }
@@ -343,6 +382,7 @@ pub fn match_folder(
             countries_found,
             bioregions_found,
             forest_types_found,
+            plots_in_extent,
             warnings,
             error: read_err,
         });
@@ -549,7 +589,8 @@ fn manifest_geography_check(
                     .any(|want| want.eq_ignore_ascii_case(c.trim()))
             }))
         }
-        // Shapefile extents need GIS work the compiler does not do yet.
+        // Shapefile extents are enforced when the user picks a local copy
+        // under Geographic filter → Reference shapefile.
         ManifestScope::Shapefile => GeoCheck::Unverified,
     }
 }

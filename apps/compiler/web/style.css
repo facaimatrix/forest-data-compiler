@@ -465,12 +465,22 @@ tr.author-row td {
   margin-bottom: 0.75rem;
 }
 
-.geo-modes label {
-  display: inline-flex;
+.geo-shp-row {
+  display: flex;
+  flex-wrap: wrap;
   align-items: center;
-  gap: 0.4rem;
-  font-weight: 600;
-  cursor: pointer;
+  gap: 0.5rem;
+  margin-top: 0.35rem;
+}
+
+.geo-shp-row .path-box {
+  flex: 1 1 180px;
+}
+
+.geo-names {
+  margin: 0.35rem 0 0;
+  padding-left: 1.15rem;
+  font-size: 0.85rem;
 }
 
 .geo-checklist {

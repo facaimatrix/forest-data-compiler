@@ -1,8 +1,9 @@
 use crate::geo::{GeoFilter, GeoMode, BIOREGION_COLUMNS, COUNTRY_COLUMNS};
 use crate::manifest::CompileManifest;
 use crate::project_filter::{
-    any_value_text, apply_manifest_filters, filter_rows_by_values,
+    any_value_text, apply_manifest_filters, filter_rows_by_extent, filter_rows_by_values,
 };
+use crate::raster_lookup::ExtentMap;
 use crate::reader::read_file;
 use chrono::Utc;
 use polars::prelude::*;
@@ -96,6 +97,18 @@ pub fn compile_files(
             } else {
                 opts.geo.countries.join(", ")
             }
+        )),
+        GeoMode::Shapefile => notes.push(format!(
+            "Geography filter: plots inside {}",
+            opts.geo
+                .shapefile_path
+                .as_deref()
+                .map(|p| Path::new(p)
+                    .file_name()
+                    .and_then(|s| s.to_str())
+                    .unwrap_or(p)
+                    .to_string())
+                .unwrap_or_else(|| "shapefile".into())
         )),
     }
 
@@ -201,6 +214,20 @@ fn concat_tables(
     let mut all_cols: BTreeSet<String> = BTreeSet::new();
     let mut filter_notes: Vec<String> = Vec::new();
 
+    let extent = if geo.mode == GeoMode::Shapefile {
+        let path = geo
+            .shapefile_path
+            .as_deref()
+            .map(str::trim)
+            .filter(|s| !s.is_empty())
+            .ok_or_else(|| {
+                "Choose a reference shapefile to select plots by Latitude/Longitude".to_string()
+            })?;
+        Some(ExtentMap::from_path(Path::new(path))?)
+    } else {
+        None
+    };
+
     for path in paths {
         let label = path
             .file_name()
@@ -217,7 +244,8 @@ fn concat_tables(
             filter_notes.push(format!("{label}: {note}"));
         }
 
-        df = apply_geo_row_filter(df, geo).map_err(|e| format!("{}: {e}", path.display()))?;
+        df = apply_geo_row_filter(df, geo, extent.as_ref())
+            .map_err(|e| format!("{}: {e}", path.display()))?;
         if df.height() == 0 {
             filter_notes.push(format!("{label}: no rows matched the project filters"));
             continue;
@@ -285,19 +313,33 @@ fn concat_tables(
     Ok((combined, sources, filter_notes))
 }
 
-fn apply_geo_row_filter(df: DataFrame, geo: &GeoFilter) -> Result<DataFrame, String> {
-    let (columns, allowed): (&[&str], &[String]) = match geo.mode {
-        GeoMode::Global => return Ok(df),
-        GeoMode::Bioregions if !geo.bioregions.is_empty() => {
-            (BIOREGION_COLUMNS, &geo.bioregions)
+fn apply_geo_row_filter(
+    df: DataFrame,
+    geo: &GeoFilter,
+    extent: Option<&ExtentMap>,
+) -> Result<DataFrame, String> {
+    match geo.mode {
+        GeoMode::Global => Ok(df),
+        GeoMode::Shapefile => {
+            let Some(extent) = extent else {
+                return Err(
+                    "Choose a reference shapefile to select plots by Latitude/Longitude".into(),
+                );
+            };
+            match filter_rows_by_extent(df.clone(), extent)? {
+                Some(filtered) => Ok(filtered),
+                // No Latitude/Longitude columns: fail closed rather than keep every row.
+                None => Ok(df.head(Some(0))),
+            }
         }
-        GeoMode::ByCountry if !geo.countries.is_empty() => (COUNTRY_COLUMNS, &geo.countries),
-        _ => return Ok(df),
-    };
-
-    // A missing column means the file carries no such label; keep the rows and
-    // let the file-level screen in `match_files` decide.
-    Ok(filter_rows_by_values(df.clone(), columns, allowed)?.unwrap_or(df))
+        GeoMode::Bioregions if !geo.bioregions.is_empty() => {
+            Ok(filter_rows_by_values(df.clone(), BIOREGION_COLUMNS, &geo.bioregions)?.unwrap_or(df))
+        }
+        GeoMode::ByCountry if !geo.countries.is_empty() => {
+            Ok(filter_rows_by_values(df.clone(), COUNTRY_COLUMNS, &geo.countries)?.unwrap_or(df))
+        }
+        _ => Ok(df),
+    }
 }
 
 fn align_to_string_schema(df: DataFrame, cols: &[String]) -> Result<DataFrame, String> {

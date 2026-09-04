@@ -4,6 +4,8 @@
 
 use crate::geo::{BIOREGION_COLUMNS, COUNTRY_COLUMNS};
 use crate::manifest::{CompileManifest, ManifestScope};
+use crate::raster_lookup::ExtentMap;
+use crate::reader::{parse_coord, LAT_COLUMNS, LON_COLUMNS};
 use polars::prelude::*;
 
 pub const CONTINENT_COLUMNS: &[&str] = &["Continent"];
@@ -131,6 +133,40 @@ pub fn filter_rows_by_values(
             }
         };
         mask.push(keep);
+    }
+    let mask = BooleanChunked::new("mask".into(), &mask);
+    df.filter(&mask).map(Some).map_err(|e| e.to_string())
+}
+
+/// Keep rows whose Latitude/Longitude fall inside `extent`.
+/// Returns None when the frame has no lat/lon columns.
+pub fn filter_rows_by_extent(
+    df: DataFrame,
+    extent: &ExtentMap,
+) -> Result<Option<DataFrame>, String> {
+    let Some(lat_name) = resolve_column(&df, LAT_COLUMNS) else {
+        return Ok(None);
+    };
+    let Some(lon_name) = resolve_column(&df, LON_COLUMNS) else {
+        return Ok(None);
+    };
+
+    let lat = df.column(&lat_name).map_err(|e| e.to_string())?;
+    let lon = df.column(&lon_name).map_err(|e| e.to_string())?;
+    let n = lat.len().min(lon.len());
+    let mut mask = Vec::with_capacity(df.height());
+    for i in 0..n {
+        let keep = match (
+            lat.get(i).ok().and_then(parse_coord),
+            lon.get(i).ok().and_then(parse_coord),
+        ) {
+            (Some(la), Some(lo)) => extent.contains(la, lo),
+            _ => false,
+        };
+        mask.push(keep);
+    }
+    while mask.len() < df.height() {
+        mask.push(false);
     }
     let mask = BooleanChunked::new("mask".into(), &mask);
     df.filter(&mask).map(Some).map_err(|e| e.to_string())

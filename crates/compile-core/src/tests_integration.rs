@@ -358,4 +358,80 @@ mod tests {
         assert!(err.contains("No rows left"), "unexpected error: {err}");
         cleanup(&out);
     }
+
+    #[test]
+    fn shapefile_extent_selects_amazon_dataset_names() {
+        use crate::geo::{GeoFilter, GeoMode};
+        use crate::raster_lookup::write_test_gez_shapefile;
+
+        let dir = std::env::temp_dir().join(format!("fdc-extent-select-{}", std::process::id()));
+        let _ = std::fs::create_dir_all(&dir);
+        let amazon = dir.join("AmazonInside_GFB3.csv");
+        let paris = dir.join("ParisOutside_GFB3.csv");
+        let shp = dir.join("extent.shp");
+        let header = "PlotID,TreeID,YR,Status,DBH,Species,Latitude,Longitude,Country\n";
+        std::fs::write(
+            &amazon,
+            format!("{header}P1,T1,2010,0,12.0,Ocotea,-2.5,-60.0,Brazil\n"),
+        )
+        .unwrap();
+        std::fs::write(
+            &paris,
+            format!("{header}P2,T1,2010,0,11.0,Quercus,48.85,2.35,France\n"),
+        )
+        .unwrap();
+        write_test_gez_shapefile(&shp);
+
+        let manifest = dummy_manifest("global-all.json");
+        let bundle = match_folder(
+            &dir,
+            &manifest,
+            &MatchOptions {
+                joined_owners_only: false,
+                include_unregistered: true,
+                recursive: false,
+                geo: GeoFilter {
+                    mode: GeoMode::Shapefile,
+                    shapefile_path: Some(shp.display().to_string()),
+                    ..Default::default()
+                },
+            },
+        )
+        .unwrap();
+
+        let names: Vec<_> = bundle
+            .candidates
+            .iter()
+            .filter(|c| c.selected)
+            .map(|c| c.file_name.as_str())
+            .collect();
+        assert_eq!(names, vec!["AmazonInside_GFB3.csv"]);
+        let amazon_hit = bundle
+            .candidates
+            .iter()
+            .find(|c| c.file_name == "AmazonInside_GFB3.csv")
+            .unwrap();
+        assert_eq!(amazon_hit.plots_in_extent, Some(1));
+
+        let out = std::env::temp_dir().join("fdc-extent-compile.csv");
+        let report = compile_files(
+            &[amazon, paris],
+            &out,
+            &manifest,
+            &CompileOptions {
+                format: CompileFormat::Csv,
+                add_source_column: true,
+                geo: GeoFilter {
+                    mode: GeoMode::Shapefile,
+                    shapefile_path: Some(shp.display().to_string()),
+                    ..Default::default()
+                },
+            },
+        )
+        .unwrap();
+        assert_eq!(report.source_count, 1);
+        assert_eq!(report.sources[0].file_name, "AmazonInside_GFB3.csv");
+        assert_eq!(report.total_rows, 1);
+        cleanup(&out);
+    }
 }

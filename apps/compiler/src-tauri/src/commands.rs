@@ -75,8 +75,7 @@ pub async fn load_manifest(path: String) -> Result<ManifestSummary, String> {
         let mut unenforced = Vec::new();
         if m.scope() == ManifestScope::Shapefile {
             unenforced.push(format!(
-                "Custom extent shapefile ({}) — geography cannot be checked here; \
-                 use the country or bioregion filter instead.",
+                "Project extent shapefile ({}) — pick a local copy under Geographic filter → Reference shapefile to keep plots whose Latitude/Longitude fall inside it.",
                 m.requirements
                     .geography
                     .extent_shapefile_name
@@ -159,6 +158,8 @@ pub struct ScanInput {
     pub bioregions: Vec<String>,
     #[serde(default)]
     pub countries: Vec<String>,
+    #[serde(default)]
+    pub shapefile_path: Option<String>,
 }
 
 #[derive(Debug, Serialize)]
@@ -183,6 +184,7 @@ pub async fn scan_folder(input: ScanInput) -> Result<ScanResult, String> {
                 mode: GeoMode::parse(&input.geo_mode),
                 bioregions: input.bioregions,
                 countries: input.countries,
+                shapefile_path: input.shapefile_path,
             },
         };
         let bundle = match_folder(&folder, &input.manifest, &opts)?;
@@ -215,6 +217,8 @@ pub struct CompileInput {
     pub bioregions: Vec<String>,
     #[serde(default)]
     pub countries: Vec<String>,
+    #[serde(default)]
+    pub shapefile_path: Option<String>,
 }
 
 #[command]
@@ -235,6 +239,7 @@ pub async fn compile_selection(input: CompileInput) -> Result<CompileReport, Str
                 mode: GeoMode::parse(&input.geo_mode),
                 bioregions: input.bioregions,
                 countries: input.countries,
+                shapefile_path: input.shapefile_path,
             },
         };
         compile_files(&paths, &output, &input.manifest, &opts)
