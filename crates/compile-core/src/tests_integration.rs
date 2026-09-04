@@ -211,14 +211,133 @@ mod tests {
         assert_eq!(loaded.coauthors[1].author_name, "Ada Rivera");
         assert_eq!(loaded.coauthors[1].author_email.as_deref(), Some("ada@example.org"));
 
+        assert!(
+            !loaded.notes.iter().any(|n| n.contains("by hand")),
+            "filled metadata should not keep 'fill by hand' notes: {:?}",
+            loaded.notes
+        );
+
         let reloaded = inspect_file(&dest).unwrap().metadata;
         assert_eq!(reloaded.coauthors.len(), 2);
         assert_eq!(reloaded.coauthors[1].affiliation.as_deref(), Some("Example Lab"));
 
-        let directory = crate::dataset_metadata::build_author_directory(&[reloaded]);
+        let directory = crate::dataset_metadata::build_author_directory(&[reloaded.clone()]);
         assert_eq!(directory.people.len(), 2);
+        let authors_report = crate::dataset_metadata::write_author_sidecars(&[reloaded]).unwrap();
+        assert_eq!(authors_report.written.len(), 1);
+        let authors = std::path::PathBuf::from(&authors_report.written[0]);
+        assert_eq!(
+            authors.file_name().unwrap().to_string_lossy(),
+            "fdc-meta-DummyNetwork_GFB3_authors.json"
+        );
         let _ = std::fs::remove_file(&dest);
         let _ = std::fs::remove_file(sidecar_path(&dest));
+        let _ = std::fs::remove_file(&authors);
+    }
+
+    #[test]
+    fn inspect_fills_ecoregion_from_fao_gez_raster() {
+        use crate::dataset_metadata::inspect_file_with;
+        use crate::raster_lookup::{write_test_gez_geotiff, RasterCatalog};
+
+        let dir = std::env::temp_dir().join("fdc-nogeo-raster");
+        let _ = std::fs::create_dir_all(&dir);
+        let csv = dir.join("AmazonPlot_GFB3.csv");
+        let tif = dir.join("fao_gez2010.tif");
+        std::fs::write(
+            &csv,
+            "PlotID,TreeID,YR,Latitude,Longitude\nP1,T1,2010,-2.5,-60.0\n",
+        )
+        .unwrap();
+        write_test_gez_geotiff(&tif, 4, 4, -62.0, 0.0, 1.0, 1);
+        let catalog = RasterCatalog::from_dir(&dir).unwrap();
+        let inspect = inspect_file_with(&csv, Some(&catalog)).unwrap();
+        assert_eq!(
+            inspect.metadata.geography.ecoregion_source.as_deref(),
+            Some("geotiff")
+        );
+        assert!(inspect
+            .metadata
+            .geography
+            .ecoregions
+            .iter()
+            .any(|e| e == "Tropical moist broadleaf forests"));
+        assert!(inspect.metadata.forest_types.iter().any(|f| f == "Tropical"));
+        let _ = std::fs::remove_file(&csv);
+        let _ = std::fs::remove_file(&tif);
+    }
+
+    #[test]
+    fn inspect_fills_ecoregion_from_fao_gez_shapefile() {
+        use crate::dataset_metadata::inspect_file_with;
+        use crate::raster_lookup::{write_test_gez_shapefile, RasterCatalog};
+
+        let dir = std::env::temp_dir().join("fdc-nogeo-shp");
+        let _ = std::fs::create_dir_all(&dir);
+        let csv = dir.join("AmazonPlot_GFB3.csv");
+        let shp = dir.join("fao_gez2010.shp");
+        std::fs::write(
+            &csv,
+            "PlotID,TreeID,YR,Latitude,Longitude\nP1,T1,2010,-2.5,-60.0\n",
+        )
+        .unwrap();
+        write_test_gez_shapefile(&shp);
+        let catalog = RasterCatalog::from_dir(&dir).unwrap();
+        let inspect = inspect_file_with(&csv, Some(&catalog)).unwrap();
+        assert_eq!(
+            inspect.metadata.geography.ecoregion_source.as_deref(),
+            Some("shapefile")
+        );
+        assert!(inspect
+            .metadata
+            .geography
+            .ecoregions
+            .iter()
+            .any(|e| e == "Tropical moist broadleaf forests"));
+        let _ = std::fs::remove_file(&csv);
+        for ext in ["shp", "shx", "dbf"] {
+            let _ = std::fs::remove_file(shp.with_extension(ext));
+        }
+    }
+
+    #[test]
+    fn inspect_suggests_country_when_table_has_no_country_column() {
+        use crate::dataset_metadata::{authors_path, inspect_file};
+
+        let dest = std::env::temp_dir().join("fdc-nogeo-AmazonPlot_GFB3.csv");
+        std::fs::write(
+            &dest,
+            "PlotID,TreeID,YR,Latitude,Longitude\nP1,T1,2010,-2.5,-60.0\n",
+        )
+        .unwrap();
+        let inspect = inspect_file(&dest).unwrap();
+        assert!(inspect.suggested_countries.iter().any(|c| c == "Brazil"));
+        assert!(inspect.metadata.geography.countries.iter().any(|c| c == "Brazil"));
+        assert_eq!(
+            inspect.metadata.geography.country_source.as_deref(),
+            Some("coordinates")
+        );
+        assert_eq!(
+            authors_path(&dest).file_name().unwrap().to_string_lossy(),
+            "fdc-nogeo-AmazonPlot_GFB3_authors.json"
+        );
+        let _ = std::fs::remove_file(&dest);
+    }
+
+    #[test]
+    fn suggests_country_from_plot_coordinates() {
+        use crate::country_lookup::suggest_from_coordinates;
+        use crate::reader::peek_coordinate_pairs;
+
+        let points = peek_coordinate_pairs(
+            &dummy_root().join("DummyNetwork_GFB3.csv"),
+            50_000,
+        )
+        .unwrap();
+        assert!(!points.is_empty());
+        let (countries, continents) = suggest_from_coordinates(&points);
+        assert!(countries.iter().any(|c| c == "Brazil"));
+        assert!(continents.iter().any(|c| c == "South America"));
     }
 
     #[test]

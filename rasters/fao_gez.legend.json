@@ -1,0 +1,99 @@
+{
+  "nodata": 0,
+  "classes": {
+    "1": {
+      "label": "Tropical rain forest",
+      "bioregion": "Tropical moist broadleaf forests",
+      "forest_types": ["Tropical"]
+    },
+    "2": {
+      "label": "Tropical moist deciduous forest",
+      "bioregion": "Tropical moist broadleaf forests",
+      "forest_types": ["Tropical"]
+    },
+    "3": {
+      "label": "Tropical dry forest",
+      "bioregion": "Tropical dry broadleaf forests",
+      "forest_types": ["Tropical", "Dry forest"]
+    },
+    "4": {
+      "label": "Tropical shrubland",
+      "bioregion": "Tropical dry broadleaf forests",
+      "forest_types": ["Tropical", "Dry forest"]
+    },
+    "5": {
+      "label": "Tropical desert",
+      "forest_types": ["Tropical"]
+    },
+    "6": {
+      "label": "Tropical mountain systems",
+      "bioregion": "Tropical moist broadleaf forests",
+      "forest_types": ["Tropical", "Montane"]
+    },
+    "7": {
+      "label": "Subtropical humid forest",
+      "bioregion": "Temperate broadleaf & mixed forests",
+      "forest_types": ["Subtropical"]
+    },
+    "8": {
+      "label": "Subtropical dry forest",
+      "bioregion": "Mediterranean forests",
+      "forest_types": ["Subtropical", "Mediterranean", "Dry forest"]
+    },
+    "9": {
+      "label": "Subtropical steppe",
+      "bioregion": "Mediterranean forests",
+      "forest_types": ["Subtropical", "Dry forest"]
+    },
+    "10": {
+      "label": "Subtropical desert",
+      "forest_types": ["Subtropical"]
+    },
+    "11": {
+      "label": "Subtropical mountain systems",
+      "bioregion": "Temperate coniferous forests",
+      "forest_types": ["Subtropical", "Montane"]
+    },
+    "12": {
+      "label": "Temperate oceanic forest",
+      "bioregion": "Temperate broadleaf & mixed forests",
+      "forest_types": ["Temperate"]
+    },
+    "13": {
+      "label": "Temperate continental forest",
+      "bioregion": "Temperate broadleaf & mixed forests",
+      "forest_types": ["Temperate"]
+    },
+    "14": {
+      "label": "Temperate steppe",
+      "bioregion": "Temperate broadleaf & mixed forests",
+      "forest_types": ["Temperate"]
+    },
+    "15": {
+      "label": "Temperate desert",
+      "forest_types": ["Temperate"]
+    },
+    "16": {
+      "label": "Temperate mountain systems",
+      "bioregion": "Temperate coniferous forests",
+      "forest_types": ["Temperate", "Montane"]
+    },
+    "17": {
+      "label": "Boreal coniferous forest",
+      "bioregion": "Boreal forests/taiga",
+      "forest_types": ["Boreal", "Coniferous"]
+    },
+    "18": {
+      "label": "Boreal tundra woodland",
+      "bioregion": "Boreal forests/taiga",
+      "forest_types": ["Boreal"]
+    },
+    "19": {
+      "label": "Boreal mountain systems",
+      "bioregion": "Boreal forests/taiga",
+      "forest_types": ["Boreal", "Montane"]
+    },
+    "20": { "label": "Polar" },
+    "21": { "label": "Water" }
+  }
+}

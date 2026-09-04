@@ -59,11 +59,25 @@ pick the folder, and write `{stem}.metadata.json` next to each table.
 Each sidecar uses `schema: "forest-data-exchange.dataset_metadata"` and records
 the same fields the website stores on a dataset: attribute flags, countries /
 continents / ecoregions, forest types, census year window, and plot / tree
-counts. Contributor name and email are optional (they are not in the table). Each
-sidecar also holds a `coauthors` list (`author_name`, `author_email`,
-`affiliation`, `role`, `author_order`) that you edit per dataset. Roles match
-the website (`corresponding` / `co_author`). **Export author directory…** writes
-a de-duplicated contact/publication list across the selected files.
+counts. Use **Edit metadata** to fill contributor, countries, continents, bioregions,
+forest types, census years, attributes, and coauthors. If the table has plot
+coordinates but no Country column, countries (and continents) are suggested
+from those coordinates — review plots near borders.
+
+To auto-fill **bioregion** and **forest type**, pick a layer per field — shapefile
+(`.shp`) or GeoTIFF (`.tif`). FAO GEZ 2010 as a **shapefile** is the better
+ecoregion source; a classified forest-type GeoTIFF is fine for the other field.
+You can also drop files in `{data folder}/rasters` or set
+`FOREST_DATA_COMPILER_RASTERS`. Layers must be geographic WGS84 (EPSG:4326).
+Optional `{stem}.legend.json` maps pixel codes or shapefile attributes; FAO GEZ
+names (`TAr`, `Tropical rain forest`, …) are recognized. The app does not ship
+the FAO files; download GEZ from the
+[FAO catalog](https://data.apps.fao.org/catalog/dataset/2fb209d0-fd34-4e5e-a3d8-a13c241eb61b).
+
+Each sidecar also holds a `coauthors` list (`author_name`, `author_email`,
+`affiliation`, `role`, `author_order`). Roles match the website
+(`corresponding` / `co_author`). **Write {dataset}_authors.json** writes a
+de-duplicated contact list next to each selected file as `{stem}_authors.json`.
 
 The compile matcher reads these sidecars so a backfilled file can be selected
 even when it is missing from a project manifest's `registered_datasets`.

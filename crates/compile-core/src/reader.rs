@@ -127,6 +127,93 @@ pub fn peek_column_uniques(
     Ok(set.into_iter().collect())
 }
 
+pub const LAT_COLUMNS: &[&str] = &[
+    "Latitude",
+    "Lat",
+    "Latitude (plot)",
+    "PlotLat",
+    "plot_lat",
+];
+pub const LON_COLUMNS: &[&str] = &[
+    "Longitude",
+    "Lon",
+    "Long",
+    "Longitude (plot)",
+    "PlotLon",
+    "plot_lon",
+];
+
+/// Unique plot coordinates from the first matching lat/lon columns (capped).
+pub fn peek_coordinate_pairs(
+    path: &Path,
+    max_rows: usize,
+) -> Result<Vec<(f64, f64)>, ReadError> {
+    let headers = peek_headers(path)?;
+    let lat_name = resolve_header(&headers, LAT_COLUMNS);
+    let lon_name = resolve_header(&headers, LON_COLUMNS);
+    let (Some(lat_name), Some(lon_name)) = (lat_name, lon_name) else {
+        return Ok(Vec::new());
+    };
+
+    let ext = path
+        .extension()
+        .and_then(|e| e.to_str())
+        .unwrap_or("")
+        .to_lowercase();
+    let df = match ext.as_str() {
+        "csv" => read_csv_n_rows(path, b',', max_rows)?,
+        "tsv" => read_csv_n_rows(path, b'\t', max_rows)?,
+        _ => read_file(path)?.head(Some(max_rows)),
+    };
+    if df.width() == 0 {
+        return Ok(Vec::new());
+    }
+    let lat = df.column(&lat_name).map_err(ReadError::Polars)?;
+    let lon = df.column(&lon_name).map_err(ReadError::Polars)?;
+    let mut set = BTreeSet::new();
+    for i in 0..lat.len().min(lon.len()) {
+        let la = lat.get(i).ok().and_then(parse_coord);
+        let lo = lon.get(i).ok().and_then(parse_coord);
+        if let (Some(la), Some(lo)) = (la, lo) {
+            // 4-decimal rounding (~11 m) collapses repeat census visits.
+            let key = ((la * 10000.0).round() as i64, (lo * 10000.0).round() as i64);
+            set.insert(key);
+        }
+    }
+    Ok(set
+        .into_iter()
+        .map(|(la, lo)| (la as f64 / 10000.0, lo as f64 / 10000.0))
+        .collect())
+}
+
+fn resolve_header(headers: &[String], candidates: &[&str]) -> Option<String> {
+    candidates.iter().find_map(|c| {
+        headers
+            .iter()
+            .find(|h| h.eq_ignore_ascii_case(c))
+            .cloned()
+    })
+}
+
+fn parse_coord(v: AnyValue) -> Option<f64> {
+    let n = match v {
+        AnyValue::Null => return None,
+        AnyValue::Float64(n) => n,
+        AnyValue::Float32(n) => n as f64,
+        AnyValue::Int64(n) => n as f64,
+        AnyValue::Int32(n) => n as f64,
+        other => crate::project_filter::any_value_text(other)
+            .trim()
+            .parse::<f64>()
+            .ok()?,
+    };
+    if n.is_finite() && n.abs() <= 180.0 {
+        Some(n)
+    } else {
+        None
+    }
+}
+
 fn peek_csv_headers(path: &Path, sep: u8) -> Result<Vec<String>, ReadError> {
     use std::io::{BufRead, BufReader};
     let file = std::fs::File::open(path)?;

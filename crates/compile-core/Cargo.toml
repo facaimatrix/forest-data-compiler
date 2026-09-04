@@ -13,3 +13,6 @@ chrono = { workspace = true }
 calamine = { workspace = true }
 rust_xlsxwriter = { workspace = true }
 zip = { workspace = true }
+georaster = "0.2"
+shapefile = { version = "0.6", features = ["geo-types"] }
+geo = "0.28"

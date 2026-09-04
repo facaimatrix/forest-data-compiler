@@ -2,12 +2,13 @@ use compile_core::compile::{
     compile_files, default_output_name, CompileFormat, CompileOptions, CompileReport,
 };
 use compile_core::dataset_metadata::{
-    inspect_folder, write_author_directory, write_sidecars, DatasetMetadata, MetadataInspect,
+    inspect_with_rasters, write_author_sidecars, write_sidecars, DatasetMetadata, InspectBundle,
     WriteOptions, WriteReport,
 };
 use compile_core::geo::{GeoFilter, GeoMode, BIOREGIONS};
 use compile_core::manifest::{AttributeReq, CompileManifest, ManifestScope};
 use compile_core::match_files::{match_folder, CandidateFile, MatchOptions};
+use compile_core::raster_lookup::LayerSources;
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 use tauri::command;
@@ -259,14 +260,31 @@ pub async fn suggest_output_name(
 pub struct InspectMetadataInput {
     pub folder: String,
     pub recursive: bool,
+    #[serde(default)]
+    pub raster_folder: Option<String>,
+    #[serde(default)]
+    pub ecoregion_layer: Option<String>,
+    #[serde(default)]
+    pub forest_type_layer: Option<String>,
 }
 
 #[command]
 pub async fn inspect_folder_metadata(
     input: InspectMetadataInput,
-) -> Result<Vec<MetadataInspect>, String> {
+) -> Result<InspectBundle, String> {
     tauri::async_runtime::spawn_blocking(move || {
-        inspect_folder(&PathBuf::from(&input.folder), input.recursive)
+        let opt_path = |s: Option<String>| {
+            s.filter(|p| !p.trim().is_empty()).map(PathBuf::from)
+        };
+        inspect_with_rasters(
+            &PathBuf::from(&input.folder),
+            input.recursive,
+            &LayerSources {
+                folder: opt_path(input.raster_folder),
+                ecoregion: opt_path(input.ecoregion_layer),
+                forest_type: opt_path(input.forest_type_layer),
+            },
+        )
     })
     .await
     .map_err(|e| e.to_string())?
@@ -302,16 +320,13 @@ pub async fn write_dataset_metadata(input: WriteMetadataInput) -> Result<WriteRe
 #[derive(Debug, Deserialize)]
 pub struct AuthorDirectoryInput {
     pub items: Vec<DatasetMetadata>,
-    pub output_path: String,
 }
 
 #[command]
-pub async fn export_author_directory(input: AuthorDirectoryInput) -> Result<String, String> {
-    tauri::async_runtime::spawn_blocking(move || {
-        write_author_directory(&input.items, &PathBuf::from(&input.output_path))
-    })
-    .await
-    .map_err(|e| e.to_string())?
+pub async fn export_author_directory(input: AuthorDirectoryInput) -> Result<WriteReport, String> {
+    tauri::async_runtime::spawn_blocking(move || write_author_sidecars(&input.items))
+        .await
+        .map_err(|e| e.to_string())?
 }
 
 fn parse_format(s: &str) -> Result<CompileFormat, String> {

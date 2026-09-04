@@ -5,10 +5,12 @@
 //! from the table itself so they can be registered and compiled like new ones.
 
 use crate::attributes::{detect_attributes, looks_like_gfb3};
+use crate::country_lookup::suggest_from_coordinates;
 use crate::geo::{BIOREGION_COLUMNS, COUNTRY_COLUMNS};
 use crate::match_files::list_data_files;
+use crate::raster_lookup::{LayerSources, RasterCatalog, RasterCatalogStatus, RasterSuggestions};
 use crate::project_filter::{CONTINENT_COLUMNS, FOREST_TYPE_COLUMNS, YEAR_COLUMNS};
-use crate::reader::{peek_column_uniques, peek_headers};
+use crate::reader::{peek_column_uniques, peek_coordinate_pairs, peek_headers};
 use chrono::Utc;
 use serde::{Deserialize, Serialize};
 use std::collections::{BTreeSet, HashMap};
@@ -50,6 +52,9 @@ pub struct DatasetMetadata {
     pub geography: DatasetGeography,
     #[serde(default)]
     pub forest_types: Vec<String>,
+    /// `column`, `raster`, or `manual`.
+    #[serde(default)]
+    pub forest_type_source: Option<String>,
     #[serde(default)]
     pub year_range: Option<YearSpan>,
     #[serde(default)]
@@ -80,6 +85,12 @@ pub struct DatasetGeography {
     pub continents: Vec<String>,
     #[serde(default)]
     pub ecoregions: Vec<String>,
+    /// `column`, `coordinates`, or `manual`.
+    #[serde(default)]
+    pub country_source: Option<String>,
+    /// `column`, `raster`, or `manual`.
+    #[serde(default)]
+    pub ecoregion_source: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
@@ -111,6 +122,20 @@ pub struct MetadataInspect {
     pub metadata: DatasetMetadata,
     pub sidecar_path: String,
     pub sidecar_exists: bool,
+    #[serde(default)]
+    pub suggested_countries: Vec<String>,
+    #[serde(default)]
+    pub suggested_ecoregions: Vec<String>,
+    #[serde(default)]
+    pub suggested_forest_types: Vec<String>,
+    #[serde(default)]
+    pub authors_path: String,
+}
+
+#[derive(Debug, Clone, Serialize, Default)]
+pub struct InspectBundle {
+    pub items: Vec<MetadataInspect>,
+    pub rasters: RasterCatalogStatus,
 }
 
 #[derive(Debug, Clone, Default)]
@@ -206,13 +231,22 @@ impl DatasetMetadata {
 
 /// `{stem}.metadata.json` sitting next to a GFB3 table.
 pub fn sidecar_path(data_path: &Path) -> PathBuf {
+    sibling_with_suffix(data_path, ".metadata.json")
+}
+
+/// `{stem}_authors.json` sitting next to the original dataset.
+pub fn authors_path(data_path: &Path) -> PathBuf {
+    sibling_with_suffix(data_path, "_authors.json")
+}
+
+fn sibling_with_suffix(data_path: &Path, suffix: &str) -> PathBuf {
     let stem = data_path
         .file_stem()
         .and_then(|s| s.to_str())
         .unwrap_or("dataset");
     match data_path.parent() {
-        Some(parent) => parent.join(format!("{stem}.metadata.json")),
-        None => PathBuf::from(format!("{stem}.metadata.json")),
+        Some(parent) => parent.join(format!("{stem}{suffix}")),
+        None => PathBuf::from(format!("{stem}{suffix}")),
     }
 }
 
@@ -222,36 +256,67 @@ pub fn load_alongside(data_path: &Path) -> Option<DatasetMetadata> {
 }
 
 pub fn inspect_file(path: &Path) -> Result<MetadataInspect, String> {
-    let mut metadata = infer_from_file(path)?;
+    inspect_file_with(path, None)
+}
+
+pub fn inspect_file_with(
+    path: &Path,
+    catalog: Option<&RasterCatalog>,
+) -> Result<MetadataInspect, String> {
+    let (mut metadata, hints) = infer_from_file(path, catalog)?;
     let sidecar = sidecar_path(path);
     if let Ok(existing) = DatasetMetadata::from_path(&sidecar) {
-        merge_people_from_existing(&mut metadata, &existing);
+        merge_existing_sidecar(&mut metadata, &existing);
     }
     Ok(MetadataInspect {
         sidecar_exists: sidecar.is_file(),
         sidecar_path: sidecar.display().to_string(),
+        authors_path: authors_path(path).display().to_string(),
+        suggested_countries: hints.suggested_countries,
+        suggested_ecoregions: hints.suggested_ecoregions,
+        suggested_forest_types: hints.suggested_forest_types,
         metadata,
     })
 }
 
 pub fn inspect_folder(folder: &Path, recursive: bool) -> Result<Vec<MetadataInspect>, String> {
+    Ok(inspect_with_rasters(folder, recursive, &LayerSources::default())?.items)
+}
+
+pub fn inspect_with_rasters(
+    folder: &Path,
+    recursive: bool,
+    sources: &LayerSources,
+) -> Result<InspectBundle, String> {
     if !folder.is_dir() {
         return Err(format!("Not a folder: {}", folder.display()));
     }
+    let catalog = RasterCatalog::load(sources, Some(folder));
+    let rasters = catalog
+        .as_ref()
+        .map(|c| c.status())
+        .unwrap_or_else(|| RasterCatalogStatus {
+            message: "No map layer — pick a shapefile or GeoTIFF for ecoregion and/or forest type".into(),
+            ..RasterCatalogStatus::default()
+        });
     let files = list_data_files(folder, recursive)?;
-    let mut out = Vec::new();
+    let mut items = Vec::new();
     for path in files {
-        match inspect_file(&path) {
-            Ok(item) => out.push(item),
+        match inspect_file_with(&path, catalog.as_ref()) {
+            Ok(item) => items.push(item),
             Err(e) => {
                 let file_name = path
                     .file_name()
                     .and_then(|s| s.to_str())
                     .unwrap_or("unknown")
                     .to_string();
-                out.push(MetadataInspect {
+                items.push(MetadataInspect {
                     sidecar_path: sidecar_path(&path).display().to_string(),
                     sidecar_exists: sidecar_path(&path).is_file(),
+                    authors_path: authors_path(&path).display().to_string(),
+                    suggested_countries: Vec::new(),
+                    suggested_ecoregions: Vec::new(),
+                    suggested_forest_types: Vec::new(),
                     metadata: DatasetMetadata {
                         schema: SCHEMA.into(),
                         version: VERSION,
@@ -270,7 +335,7 @@ pub fn inspect_folder(folder: &Path, recursive: bool) -> Result<Vec<MetadataInsp
             }
         }
     }
-    Ok(out)
+    Ok(InspectBundle { items, rasters })
 }
 
 pub fn write_sidecars(items: &[DatasetMetadata], opts: &WriteOptions) -> Result<WriteReport, String> {
@@ -296,18 +361,24 @@ pub fn write_sidecars(items: &[DatasetMetadata], opts: &WriteOptions) -> Result<
             continue;
         }
         let mut meta = item.clone();
-        if let Some(email) = opts.contributor_email.as_deref().map(str::trim) {
-            if !email.is_empty() {
-                meta.contributor_email = Some(email.to_string());
+        if meta.contributor_email.as_deref().unwrap_or("").trim().is_empty() {
+            if let Some(email) = opts.contributor_email.as_deref().map(str::trim) {
+                if !email.is_empty() {
+                    meta.contributor_email = Some(email.to_string());
+                }
             }
         }
-        if let Some(name) = opts.contributor_name.as_deref().map(str::trim) {
-            if !name.is_empty() {
-                meta.contributor_name = Some(name.to_string());
+        if meta.contributor_name.as_deref().unwrap_or("").trim().is_empty() {
+            if let Some(name) = opts.contributor_name.as_deref().map(str::trim) {
+                if !name.is_empty() {
+                    meta.contributor_name = Some(name.to_string());
+                }
             }
         }
+        sanitize_lists(&mut meta);
         meta.ensure_owner_on_author_list();
         renumber_authors(&mut meta.coauthors);
+        refresh_notes(&mut meta);
         meta.generated_at = Utc::now().to_rfc3339();
         meta.generated_by = generated_by();
         match meta.to_pretty_json() {
@@ -324,7 +395,16 @@ pub fn write_sidecars(items: &[DatasetMetadata], opts: &WriteOptions) -> Result<
     Ok(report)
 }
 
-fn infer_from_file(path: &Path) -> Result<DatasetMetadata, String> {
+struct InferHints {
+    suggested_countries: Vec<String>,
+    suggested_ecoregions: Vec<String>,
+    suggested_forest_types: Vec<String>,
+}
+
+fn infer_from_file(
+    path: &Path,
+    catalog: Option<&RasterCatalog>,
+) -> Result<(DatasetMetadata, InferHints), String> {
     let file_name = path
         .file_name()
         .and_then(|s| s.to_str())
@@ -341,11 +421,52 @@ fn infer_from_file(path: &Path) -> Result<DatasetMetadata, String> {
         );
     }
 
-    let countries = peek_column_uniques(path, COUNTRY_COLUMNS, INSPECT_ROWS).unwrap_or_default();
-    let continents = peek_column_uniques(path, CONTINENT_COLUMNS, INSPECT_ROWS).unwrap_or_default();
-    let ecoregions = peek_column_uniques(path, BIOREGION_COLUMNS, INSPECT_ROWS).unwrap_or_default();
-    let forest_types =
+    let mut countries = peek_column_uniques(path, COUNTRY_COLUMNS, INSPECT_ROWS).unwrap_or_default();
+    let mut continents = peek_column_uniques(path, CONTINENT_COLUMNS, INSPECT_ROWS).unwrap_or_default();
+    let mut ecoregions = peek_column_uniques(path, BIOREGION_COLUMNS, INSPECT_ROWS).unwrap_or_default();
+    let points = peek_coordinate_pairs(path, INSPECT_ROWS).unwrap_or_default();
+    let (coord_countries, coord_continents) = suggest_from_coordinates(&points);
+    let raster = catalog
+        .map(|c| c.suggest(&points))
+        .unwrap_or_else(RasterSuggestions::default);
+    let mut country_source = if !countries.is_empty() {
+        Some("column".into())
+    } else {
+        None
+    };
+    if countries.is_empty() && !coord_countries.is_empty() {
+        countries = coord_countries.clone();
+        country_source = Some("coordinates".into());
+    }
+    if continents.is_empty() && !coord_continents.is_empty() {
+        continents = coord_continents;
+    }
+    let mut ecoregion_source = if !ecoregions.is_empty() {
+        Some("column".into())
+    } else {
+        None
+    };
+    if ecoregions.is_empty() && !raster.ecoregions.is_empty() {
+        ecoregions = raster.ecoregions.clone();
+        ecoregion_source = raster
+            .ecoregion_source
+            .clone()
+            .or_else(|| Some("geotiff".into()));
+    }
+    let mut forest_types =
         peek_column_uniques(path, FOREST_TYPE_COLUMNS, INSPECT_ROWS).unwrap_or_default();
+    let mut forest_type_source = if !forest_types.is_empty() {
+        Some("column".into())
+    } else {
+        None
+    };
+    if forest_types.is_empty() && !raster.forest_types.is_empty() {
+        forest_types = raster.forest_types.clone();
+        forest_type_source = raster
+            .forest_type_source
+            .clone()
+            .or_else(|| Some("geotiff".into()));
+    }
     let year_values = peek_column_uniques(path, YEAR_COLUMNS, INSPECT_ROWS).unwrap_or_default();
     let plots = peek_column_uniques(path, &["PlotID", "Plot_ID", "plotid"], INSPECT_ROWS)
         .unwrap_or_default();
@@ -373,24 +494,50 @@ fn infer_from_file(path: &Path) -> Result<DatasetMetadata, String> {
     if !gfb3 {
         notes.push("Does not look like a GFB3 tree table (few core columns found)".into());
     }
-    if countries.is_empty() && continents.is_empty() && ecoregions.is_empty() {
+    if country_source.as_deref() == Some("coordinates") {
+        notes.push(format!(
+            "Countries suggested from plot coordinates (review near borders): {}",
+            countries.join(", ")
+        ));
+    } else if countries.is_empty() && continents.is_empty() && ecoregions.is_empty() {
+        if points.is_empty() {
+            notes.push(
+                "No Country column and no plot coordinates — add geography in Edit metadata"
+                    .into(),
+            );
+        } else {
+            notes.push(
+                "Plot coordinates did not match a known country box — add country in Edit metadata"
+                    .into(),
+            );
+        }
+    }
+    if is_map_layer_source(ecoregion_source.as_deref())
+        || is_map_layer_source(forest_type_source.as_deref())
+    {
+        let gez = if raster.gez_labels.is_empty() {
+            String::new()
+        } else {
+            format!(" ({})", raster.gez_labels.join(", "))
+        };
+        notes.push(format!(
+            "Ecoregion / forest type suggested from map layer{gez} — review before writing"
+        ));
+    } else if forest_types.is_empty() {
         notes.push(
-            "No Country / Continent / Bioregion column — geography must be filled in by hand"
+            "No ForestType column — choose forest types in Edit metadata, or pick a shapefile / GeoTIFF"
                 .into(),
         );
     }
-    if forest_types.is_empty() {
-        notes.push("No ForestType column — forest types unknown".into());
-    }
     if year_range.is_none() {
-        notes.push("No YR / Year column — census window unknown".into());
+        notes.push("No YR / Year column — set the census window in Edit metadata".into());
     }
     notes.push(
-        "Contributor name and email are not in the table; add them before registering on Forest Data Exchange."
+        "Add contributor and coauthors in Edit metadata before registering on Forest Data Exchange."
             .into(),
     );
 
-    Ok(DatasetMetadata {
+    Ok((DatasetMetadata {
         schema: SCHEMA.into(),
         version: VERSION,
         generated_at: Utc::now().to_rfc3339(),
@@ -409,8 +556,11 @@ fn infer_from_file(path: &Path) -> Result<DatasetMetadata, String> {
             countries,
             continents,
             ecoregions,
+            country_source,
+            ecoregion_source,
         },
         forest_types,
+        forest_type_source,
         year_range,
         num_plots: if plots.is_empty() {
             None
@@ -424,7 +574,11 @@ fn infer_from_file(path: &Path) -> Result<DatasetMetadata, String> {
         },
         sampled_rows: Some(sampled_rows),
         notes,
-    })
+    }, InferHints {
+        suggested_countries: coord_countries,
+        suggested_ecoregions: raster.ecoregions,
+        suggested_forest_types: raster.forest_types,
+    }))
 }
 
 fn empty_metadata_rest() -> DatasetMetadata {
@@ -440,6 +594,7 @@ fn empty_metadata_rest() -> DatasetMetadata {
         attributes: HashMap::new(),
         geography: DatasetGeography::default(),
         forest_types: Vec::new(),
+        forest_type_source: None,
         year_range: None,
         num_plots: None,
         num_trees: None,
@@ -448,7 +603,7 @@ fn empty_metadata_rest() -> DatasetMetadata {
     }
 }
 
-fn merge_people_from_existing(into: &mut DatasetMetadata, existing: &DatasetMetadata) {
+fn merge_existing_sidecar(into: &mut DatasetMetadata, existing: &DatasetMetadata) {
     if into.contributor_email.is_none() {
         into.contributor_email = existing.contributor_email.clone();
     }
@@ -458,6 +613,150 @@ fn merge_people_from_existing(into: &mut DatasetMetadata, existing: &DatasetMeta
     if !existing.coauthors.is_empty() {
         into.coauthors = existing.coauthors.clone();
     }
+    if !existing.geography.countries.is_empty() {
+        into.geography.countries = existing.geography.countries.clone();
+        into.geography.country_source = existing
+            .geography
+            .country_source
+            .clone()
+            .or_else(|| Some("manual".into()));
+    }
+    if !existing.geography.continents.is_empty() {
+        into.geography.continents = existing.geography.continents.clone();
+    }
+    if !existing.geography.ecoregions.is_empty() {
+        into.geography.ecoregions = existing.geography.ecoregions.clone();
+        into.geography.ecoregion_source = existing
+            .geography
+            .ecoregion_source
+            .clone()
+            .or_else(|| Some("manual".into()));
+    }
+    if !existing.forest_types.is_empty() {
+        into.forest_types = existing.forest_types.clone();
+        into.forest_type_source = existing
+            .forest_type_source
+            .clone()
+            .or_else(|| Some("manual".into()));
+    }
+    if existing.year_range.is_some() {
+        into.year_range = existing.year_range.clone();
+    }
+    if !existing.attributes.is_empty() {
+        into.attributes = existing.attributes.clone();
+    }
+}
+
+fn sanitize_lists(meta: &mut DatasetMetadata) {
+    let clean = |vals: &mut Vec<String>| {
+        vals.retain(|s| !s.trim().is_empty());
+        for s in vals.iter_mut() {
+            *s = s.trim().to_string();
+        }
+        vals.sort();
+        vals.dedup();
+    };
+    clean(&mut meta.geography.countries);
+    clean(&mut meta.geography.continents);
+    clean(&mut meta.geography.ecoregions);
+    clean(&mut meta.forest_types);
+}
+
+fn has_contact(meta: &DatasetMetadata) -> bool {
+    let named = meta
+        .contributor_name
+        .as_deref()
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+        .is_some();
+    let emailed = meta
+        .contributor_email
+        .as_deref()
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+        .is_some();
+    let authors = meta.coauthors.iter().any(|c| {
+        !c.author_name.trim().is_empty()
+            || c.author_email
+                .as_deref()
+                .map(str::trim)
+                .filter(|s| !s.is_empty())
+                .is_some()
+    });
+    named || emailed || authors
+}
+
+fn is_map_layer_source(source: Option<&str>) -> bool {
+    matches!(source, Some("raster" | "geotiff" | "shapefile"))
+}
+
+fn refresh_notes(meta: &mut DatasetMetadata) {
+    let mut notes = Vec::new();
+    if !meta.source.looks_like_gfb3 {
+        notes.push("Does not look like a GFB3 tree table (few core columns found)".into());
+    }
+    if meta.geography.country_source.as_deref() == Some("coordinates") {
+        notes.push(format!(
+            "Countries suggested from plot coordinates (review near borders): {}",
+            meta.geography.countries.join(", ")
+        ));
+    } else if meta.geography.countries.is_empty()
+        && meta.geography.continents.is_empty()
+        && meta.geography.ecoregions.is_empty()
+    {
+        notes.push(
+            "No geography yet — add country, continent or bioregion in Edit metadata".into(),
+        );
+    }
+    if is_map_layer_source(meta.geography.ecoregion_source.as_deref()) {
+        notes.push(format!(
+            "Ecoregions suggested from {}: {}",
+            meta.geography.ecoregion_source.as_deref().unwrap_or("map layer"),
+            meta.geography.ecoregions.join(", ")
+        ));
+    }
+    if is_map_layer_source(meta.forest_type_source.as_deref()) {
+        notes.push(format!(
+            "Forest types suggested from {}: {}",
+            meta.forest_type_source.as_deref().unwrap_or("map layer"),
+            meta.forest_types.join(", ")
+        ));
+    } else if meta.forest_types.is_empty() {
+        notes.push("No forest types yet — choose them in Edit metadata".into());
+    }
+    if meta.year_range.is_none() {
+        notes.push("No census years yet — set the year window in Edit metadata".into());
+    }
+    if !has_contact(meta) {
+        notes.push(
+            "Add contributor and coauthors in Edit metadata before registering on Forest Data Exchange."
+                .into(),
+        );
+    }
+    meta.notes = notes;
+}
+
+pub fn write_author_sidecars(items: &[DatasetMetadata]) -> Result<WriteReport, String> {
+    let mut report = WriteReport {
+        written: Vec::new(),
+        skipped: Vec::new(),
+        errors: Vec::new(),
+    };
+    for item in items {
+        let source = PathBuf::from(&item.source.path);
+        if source.as_os_str().is_empty() {
+            report
+                .errors
+                .push(format!("{}: missing source path", item.source.file_name));
+            continue;
+        }
+        let dest = authors_path(&source);
+        match write_author_directory(std::slice::from_ref(item), &dest) {
+            Ok(path) => report.written.push(path),
+            Err(e) => report.errors.push(format!("{}: {e}", item.source.file_name)),
+        }
+    }
+    Ok(report)
 }
 
 fn emails_match(a: Option<&str>, b: Option<&str>) -> bool {

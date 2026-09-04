@@ -7,3 +7,9 @@ Thumbs.db
 .vscode/
 apps/compiler/src-tauri/gen/
 apps/compiler/src-tauri/target/
+rasters/*.tif
+rasters/*.tiff
+rasters/*.shp
+rasters/*.shx
+rasters/*.dbf
+rasters/*.prj

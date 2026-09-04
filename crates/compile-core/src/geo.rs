@@ -112,3 +112,27 @@ pub const BIOREGION_COLUMNS: &[&str] = &[
 ];
 
 pub const COUNTRY_COLUMNS: &[&str] = &["Country", "country", "COUNTRY", "Nation"];
+
+pub const CONTINENTS: &[&str] = &[
+    "Africa",
+    "Asia",
+    "Europe",
+    "North America",
+    "South America",
+    "Oceania",
+];
+
+pub const FOREST_TYPES: &[&str] = &[
+    "Tropical",
+    "Subtropical",
+    "Temperate",
+    "Boreal",
+    "Coniferous",
+    "Deciduous",
+    "Mixed",
+    "Mediterranean",
+    "Mangrove",
+    "Montane",
+    "Dry forest",
+    "Plantation",
+];

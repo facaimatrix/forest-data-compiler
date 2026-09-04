@@ -26,6 +26,10 @@ const state = {
   metadataOverwrite: false,
   metadataContactEmail: '',
   metadataContactName: '',
+  rasterFolder: null,
+  ecoregionLayer: null,
+  forestTypeLayer: null,
+  rasterStatus: null,
   lastMetadataReport: null,
   metadataOpenAuthors: {},
   busy: false,
@@ -46,6 +50,23 @@ const DEFAULT_BIOREGIONS = [
   'Boreal forests/taiga',
   'Mediterranean forests',
   'Mangroves',
+];
+
+const CONTINENTS = ['Africa', 'Asia', 'Europe', 'North America', 'South America', 'Oceania'];
+
+const FOREST_TYPES = [
+  'Tropical', 'Subtropical', 'Temperate', 'Boreal', 'Coniferous', 'Deciduous',
+  'Mixed', 'Mediterranean', 'Mangrove', 'Montane', 'Dry forest', 'Plantation',
+];
+
+const ATTRIBUTE_KEYS = [
+  ['tree_height', 'Tree height'],
+  ['agb', 'AGB'],
+  ['wood_density', 'Wood density'],
+  ['crown_diameter', 'Crown diameter'],
+  ['mortality', 'Mortality'],
+  ['recruitment', 'Recruitment'],
+  ['coordinates', 'Tree coordinates'],
 ];
 
 function api() {
@@ -216,7 +237,50 @@ function authorSummary(m) {
     .join(', ');
 }
 
-function authorEditorHtml(item, i) {
+function layerLabel(path, emptyText) {
+  if (!path) return emptyText;
+  const name = String(path).replace(/\\/g, '/').split('/').pop();
+  const ext = (name.split('.').pop() || '').toLowerCase();
+  const kind = ext === 'shp' ? 'shapefile' : (ext === 'tif' || ext === 'tiff' ? 'GeoTIFF' : 'layer');
+  return `${name} (${kind})`;
+}
+
+function layerFilters() {
+  return [{ name: 'Shapefile or GeoTIFF', extensions: ['shp', 'tif', 'tiff'] }];
+}
+
+function hasValue(list, value) {
+  return (list || []).some((x) => String(x).toLowerCase() === String(value).toLowerCase());
+}
+
+function chipList(values, idx, field) {
+  return (values || [])
+    .map((v, j) => `
+      <span class="chip">
+        ${escapeHtml(v)}
+        <button type="button" class="chip-x meta-list-remove" data-idx="${idx}" data-field="${field}" data-item="${j}" aria-label="Remove">×</button>
+      </span>
+    `)
+    .join('');
+}
+
+function checkList(options, selected, idx, field) {
+  return options
+    .map((opt) => `
+      <label class="toggle">
+        <input type="checkbox" class="meta-multi" data-idx="${idx}" data-field="${field}" value="${escapeHtml(opt)}" ${hasValue(selected, opt) ? 'checked' : ''}/>
+        ${escapeHtml(opt)}
+      </label>
+    `)
+    .join('');
+}
+
+function metadataEditorHtml(item, i) {
+  const m = item.metadata;
+  const geo = m.geography || {};
+  const suggested = (item.suggested_countries || []).filter((c) => !hasValue(geo.countries, c));
+  const suggestedEco = (item.suggested_ecoregions || []).filter((c) => !hasValue(geo.ecoregions, c));
+  const suggestedFt = (item.suggested_forest_types || []).filter((c) => !hasValue(m.forest_types, c));
   const people = item.metadata.coauthors || [];
   const rows = people
     .map((p, j) => `
@@ -239,9 +303,67 @@ function authorEditorHtml(item, i) {
       </tr>
     `)
     .join('');
+  const yr = m.year_range || {};
+  const attrs = m.attributes || {};
   return `
     <div class="author-box">
-      <div class="row" style="margin-bottom:.45rem">
+      <div class="row" style="margin-bottom:.65rem">
+        <label class="tiny" style="flex:1">Contributor name
+          <input type="text" class="meta-text" data-idx="${i}" data-key="contributor_name" value="${escapeHtml(m.contributor_name || '')}" placeholder="Dataset owner"/>
+        </label>
+        <label class="tiny" style="flex:1">Contributor email
+          <input type="text" class="meta-text" data-idx="${i}" data-key="contributor_email" value="${escapeHtml(m.contributor_email || '')}" placeholder="owner@example.org"/>
+        </label>
+        <label class="tiny">Year start
+          <input type="text" class="meta-year" data-idx="${i}" data-bound="year_start" value="${escapeHtml(yr.year_start ?? '')}" placeholder="1950"/>
+        </label>
+        <label class="tiny">Year end
+          <input type="text" class="meta-year" data-idx="${i}" data-bound="year_end" value="${escapeHtml(yr.year_end ?? '')}" placeholder="present"/>
+        </label>
+      </div>
+      <div class="tiny" style="font-weight:700;margin-bottom:.3rem">Countries ${geo.country_source ? `(${escapeHtml(geo.country_source)})` : ''}</div>
+      <div class="chips">${chipList(geo.countries, i, 'countries') || '<span class="tiny">None yet</span>'}</div>
+      <div class="row" style="margin:.4rem 0 .7rem">
+        <input type="text" class="country-add-input" data-idx="${i}" placeholder="Add country and press Enter"/>
+        <button type="button" class="btn btn-secondary country-add-btn" data-idx="${i}">Add</button>
+      </div>
+      ${
+        suggested.length
+          ? `<div class="tiny" style="margin-bottom:.7rem">Suggested from coordinates:
+              ${suggested.map((c) => `<button type="button" class="btn btn-secondary suggest-country" data-idx="${i}" data-country="${escapeHtml(c)}">+ ${escapeHtml(c)}</button>`).join(' ')}
+            </div>`
+          : ''
+      }
+      <div class="tiny" style="font-weight:700;margin-bottom:.3rem">Continents</div>
+      <div class="toggles">${checkList(CONTINENTS, geo.continents, i, 'continents')}</div>
+      <div class="tiny" style="font-weight:700;margin:.7rem 0 .3rem">Bioregions ${geo.ecoregion_source ? `(${escapeHtml(geo.ecoregion_source)})` : ''}</div>
+      <div class="toggles">${checkList(DEFAULT_BIOREGIONS, geo.ecoregions, i, 'ecoregions')}</div>
+      ${
+        suggestedEco.length
+          ? `<div class="tiny" style="margin:.35rem 0 .7rem">Suggested from raster:
+              ${suggestedEco.map((c) => `<button type="button" class="btn btn-secondary suggest-ecoregion" data-idx="${i}" data-value="${escapeHtml(c)}">+ ${escapeHtml(c)}</button>`).join(' ')}
+            </div>`
+          : ''
+      }
+      <div class="tiny" style="font-weight:700;margin:.7rem 0 .3rem">Forest types ${m.forest_type_source ? `(${escapeHtml(m.forest_type_source)})` : ''}</div>
+      <div class="toggles">${checkList(FOREST_TYPES, m.forest_types, i, 'forest_types')}</div>
+      ${
+        suggestedFt.length
+          ? `<div class="tiny" style="margin:.35rem 0 .7rem">Suggested from raster:
+              ${suggestedFt.map((c) => `<button type="button" class="btn btn-secondary suggest-forest-type" data-idx="${i}" data-value="${escapeHtml(c)}">+ ${escapeHtml(c)}</button>`).join(' ')}
+            </div>`
+          : ''
+      }
+      <div class="tiny" style="font-weight:700;margin:.7rem 0 .3rem">Attributes</div>
+      <div class="toggles">
+        ${ATTRIBUTE_KEYS.map(([key, label]) => `
+          <label class="toggle">
+            <input type="checkbox" class="meta-attr" data-idx="${i}" data-attr="${key}" ${attrs[key] ? 'checked' : ''}/>
+            ${escapeHtml(label)}
+          </label>
+        `).join('')}
+      </div>
+      <div class="row" style="margin:1rem 0 .45rem">
         <strong class="tiny" style="color:var(--green-dark)">Authors / contacts</strong>
         <button type="button" class="btn btn-secondary author-add" data-idx="${i}">Add person</button>
       </div>
@@ -280,6 +402,7 @@ function viewMetadata() {
             <div style="font-weight:600">${escapeHtml(m.source?.file_name || '—')}</div>
             <div class="tiny">${escapeHtml(m.source?.path || '')}</div>
             <div class="tiny">Sidecar: ${escapeHtml(item.sidecar_path || '')}</div>
+            <div class="tiny">Authors: ${escapeHtml(item.authors_path || '')}</div>
           </td>
           <td>${gfb} ${exists}</td>
           <td>${m.num_plots ?? '—'} / ${m.num_trees ?? '—'}</td>
@@ -288,13 +411,13 @@ function viewMetadata() {
           <td>
             <div class="tiny">${escapeHtml(authorSummary(m))}</div>
             <button type="button" class="btn btn-secondary author-toggle" data-idx="${i}" style="margin-top:.35rem">
-              ${open ? 'Hide authors' : 'Edit authors'}
+              ${open ? 'Hide editor' : 'Edit metadata'}
             </button>
           </td>
           <td class="tiny">${escapeHtml((m.forest_types || []).join(', ') || '—')}</td>
           <td class="tiny">${escapeHtml(attrs)}${notes}</td>
         </tr>
-        ${open ? `<tr class="author-row"><td></td><td colspan="8">${authorEditorHtml(item, i)}</td></tr>` : ''}
+        ${open ? `<tr class="author-row"><td></td><td colspan="8">${metadataEditorHtml(item, i)}</td></tr>` : ''}
       `;
     })
     .join('');
@@ -306,7 +429,11 @@ function viewMetadata() {
         For GFB3 files ingested before Forest Data Exchange, this writes a
         <code>{name}.metadata.json</code> sidecar next to each table. The compiler
         reads those files when matching, and the JSON matches the website
-        dataset record (attributes, geography, forest types, census years, plot counts).
+        dataset record. Use <strong>Edit metadata</strong> to fill country, forest type,
+        contributors and authors. Country is suggested from plot coordinates when the
+        table has no Country column. Pick a shapefile or GeoTIFF for ecoregion and
+        forest type (FAO GEZ shapefile is best for ecoregion). Author lists are
+        written as <code>{dataset}_authors.json</code>.
       </p>
       <div class="row">
         <button type="button" class="btn btn-primary" id="btn-pick-meta-folder">Choose folder…</button>
@@ -317,6 +444,29 @@ function viewMetadata() {
         <label class="toggle"><input type="checkbox" id="opt-meta-recursive" ${state.metadataRecursive ? 'checked' : ''}/> Scan subfolders</label>
         <label class="toggle"><input type="checkbox" id="opt-meta-overwrite" ${state.metadataOverwrite ? 'checked' : ''}/> Overwrite existing sidecars</label>
       </div>
+      <div class="row" style="margin-top:.5rem">
+        <button type="button" class="btn btn-secondary" id="btn-pick-ecoregion-layer">Ecoregion layer…</button>
+        <button type="button" class="btn btn-ghost" id="btn-clear-ecoregion-layer" ${state.ecoregionLayer ? '' : 'disabled'}>Clear</button>
+        <div class="path-box" title="${escapeHtml(state.ecoregionLayer || '')}">${escapeHtml(layerLabel(state.ecoregionLayer, 'Shapefile or GeoTIFF (FAO GEZ)'))}</div>
+      </div>
+      <div class="row" style="margin-top:.4rem">
+        <button type="button" class="btn btn-secondary" id="btn-pick-forest-layer">Forest type layer…</button>
+        <button type="button" class="btn btn-ghost" id="btn-clear-forest-layer" ${state.forestTypeLayer ? '' : 'disabled'}>Clear</button>
+        <div class="path-box" title="${escapeHtml(state.forestTypeLayer || '')}">${escapeHtml(layerLabel(state.forestTypeLayer, 'Optional — shapefile or GeoTIFF'))}</div>
+      </div>
+      <div class="row" style="margin-top:.4rem">
+        <button type="button" class="btn btn-secondary" id="btn-pick-raster-folder">Layer folder…</button>
+        <button type="button" class="btn btn-ghost" id="btn-clear-raster-folder" ${state.rasterFolder ? '' : 'disabled'}>Clear</button>
+        <div class="path-box" title="${escapeHtml(state.rasterFolder || '')}">${escapeHtml(state.rasterFolder || 'Optional — auto-detect .shp / .tif in a folder (or {data}/rasters)')}</div>
+      </div>
+      ${
+        state.rasterStatus
+          ? `<p class="tiny" style="margin-top:.35rem">${escapeHtml(state.rasterStatus.message || '')}
+              ${state.rasterStatus.ecoregion_path ? ` · ecoregion (${escapeHtml(state.rasterStatus.ecoregion_kind || 'layer')}): ${escapeHtml(state.rasterStatus.ecoregion_path)}` : ''}
+              ${state.rasterStatus.forest_type_path ? ` · forest type (${escapeHtml(state.rasterStatus.forest_type_kind || 'layer')}): ${escapeHtml(state.rasterStatus.forest_type_path)}` : ''}
+            </p>`
+          : ''
+      }
       <div class="row" style="margin-top:.5rem">
         <label class="tiny" style="flex:1">Contributor name
           <input type="text" id="meta-contact-name" value="${escapeHtml(state.metadataContactName)}" placeholder="Optional — applied to written files"/>
@@ -341,7 +491,7 @@ function viewMetadata() {
             <div class="actions">
               <span class="muted">${items.length} file(s) inspected</span>
               <div class="row">
-                <button type="button" class="btn btn-secondary" id="btn-export-authors">Export author directory…</button>
+                <button type="button" class="btn btn-secondary" id="btn-export-authors">Write {dataset}_authors.json</button>
                 <button type="button" class="btn btn-primary" id="btn-write-meta">Write selected metadata JSON</button>
               </div>
             </div>`
@@ -669,12 +819,17 @@ async function scanMetadataFolder() {
       input: {
         folder: state.metadataFolder,
         recursive: state.metadataRecursive,
+        raster_folder: state.rasterFolder || null,
+        ecoregion_layer: state.ecoregionLayer || null,
+        forest_type_layer: state.forestTypeLayer || null,
       },
     });
+    const payload = Array.isArray(result) ? { items: result, rasters: null } : result || {};
+    state.rasterStatus = payload.rasters || null;
     const previous = new Map(
       (state.metadataItems || []).map((item) => [item.metadata?.source?.path, item]),
     );
-    state.metadataItems = (result || []).map((item) => {
+    state.metadataItems = (payload.items || []).map((item) => {
       const prev = previous.get(item.metadata?.source?.path);
       if (prev?.metadata) {
         const incoming = item.metadata.coauthors || [];
@@ -684,6 +839,12 @@ async function scanMetadataFolder() {
           prev.metadata.contributor_name || item.metadata.contributor_name;
         item.metadata.contributor_email =
           prev.metadata.contributor_email || item.metadata.contributor_email;
+        item.metadata.geography = prev.metadata.geography || item.metadata.geography;
+        item.metadata.forest_types = prev.metadata.forest_types || item.metadata.forest_types;
+        item.metadata.forest_type_source =
+          prev.metadata.forest_type_source || item.metadata.forest_type_source;
+        item.metadata.attributes = prev.metadata.attributes || item.metadata.attributes;
+        item.metadata.year_range = prev.metadata.year_range || item.metadata.year_range;
         item.selected = prev.selected;
       } else {
         item.selected = true;
@@ -729,6 +890,54 @@ function bindStepHandlers() {
       showError(String(e?.message || e));
       setLoading(false);
     }
+  });
+  $('btn-pick-ecoregion-layer')?.addEventListener('click', async () => {
+    try {
+      const path = await openFile(layerFilters());
+      if (!path) return;
+      state.ecoregionLayer = path;
+      if (state.metadataFolder) await scanMetadataFolder();
+      else render();
+    } catch (e) {
+      showError(String(e?.message || e));
+    }
+  });
+  $('btn-clear-ecoregion-layer')?.addEventListener('click', async () => {
+    state.ecoregionLayer = null;
+    if (state.metadataFolder) await scanMetadataFolder();
+    else render();
+  });
+  $('btn-pick-forest-layer')?.addEventListener('click', async () => {
+    try {
+      const path = await openFile(layerFilters());
+      if (!path) return;
+      state.forestTypeLayer = path;
+      if (state.metadataFolder) await scanMetadataFolder();
+      else render();
+    } catch (e) {
+      showError(String(e?.message || e));
+    }
+  });
+  $('btn-clear-forest-layer')?.addEventListener('click', async () => {
+    state.forestTypeLayer = null;
+    if (state.metadataFolder) await scanMetadataFolder();
+    else render();
+  });
+  $('btn-pick-raster-folder')?.addEventListener('click', async () => {
+    try {
+      const folder = await openFolder();
+      if (!folder) return;
+      state.rasterFolder = folder;
+      if (state.metadataFolder) await scanMetadataFolder();
+      else render();
+    } catch (e) {
+      showError(String(e?.message || e));
+    }
+  });
+  $('btn-clear-raster-folder')?.addEventListener('click', async () => {
+    state.rasterFolder = null;
+    if (state.metadataFolder) await scanMetadataFolder();
+    else render();
   });
   $('btn-rescan-meta')?.addEventListener('click', scanMetadataFolder);
   $('opt-meta-recursive')?.addEventListener('change', async (e) => {
@@ -820,25 +1029,133 @@ function bindStepHandlers() {
       return;
     }
     try {
-      const output = await saveFile('forest-data-exchange-author-directory.json', [
-        { name: 'Author directory', extensions: ['json'] },
-      ]);
-      if (!output) return;
-      setLoading(true, 'Writing author directory…');
-      const path = await invoke('export_author_directory', {
-        input: { items, output_path: output },
-      });
-      state.lastMetadataReport = {
-        written: [path],
-        skipped: [],
-        errors: [],
-      };
+      setLoading(true, 'Writing author lists…');
+      const report = await invoke('export_author_directory', { input: { items } });
+      state.lastMetadataReport = report;
       render();
     } catch (e) {
       showError(String(e?.message || e));
     } finally {
       setLoading(false);
     }
+  });
+
+  function metaList(idx, field) {
+    const m = state.metadataItems[idx]?.metadata;
+    if (!m) return null;
+    if (field === 'forest_types') return (m.forest_types ||= []);
+    m.geography ||= { countries: [], continents: [], ecoregions: [] };
+    if (field === 'countries') return (m.geography.countries ||= []);
+    if (field === 'continents') return (m.geography.continents ||= []);
+    if (field === 'ecoregions') return (m.geography.ecoregions ||= []);
+    return null;
+  }
+
+  function addCountry(idx, raw) {
+    const name = String(raw || '').trim();
+    const list = metaList(idx, 'countries');
+    if (!name || !list || hasValue(list, name)) return;
+    list.push(name);
+    const geo = state.metadataItems[idx].metadata.geography;
+    geo.country_source = 'manual';
+    render();
+  }
+
+  document.querySelectorAll('.meta-text').forEach((el) => {
+    el.addEventListener('input', () => {
+      const m = state.metadataItems[Number(el.dataset.idx)]?.metadata;
+      if (m) m[el.dataset.key] = el.value;
+    });
+  });
+  document.querySelectorAll('.meta-year').forEach((el) => {
+    el.addEventListener('input', () => {
+      const m = state.metadataItems[Number(el.dataset.idx)]?.metadata;
+      if (!m) return;
+      m.year_range ||= { year_start: null, year_end: null };
+      const raw = el.value.trim();
+      if (!raw || /present/i.test(raw)) m.year_range[el.dataset.bound] = null;
+      else {
+        const n = Number.parseInt(raw, 10);
+        m.year_range[el.dataset.bound] = Number.isFinite(n) ? n : null;
+      }
+    });
+  });
+  document.querySelectorAll('.meta-multi').forEach((el) => {
+    el.addEventListener('change', () => {
+      const idx = Number(el.dataset.idx);
+      const list = metaList(idx, el.dataset.field);
+      if (!list) return;
+      const value = el.value;
+      const i = list.findIndex((x) => String(x).toLowerCase() === value.toLowerCase());
+      if (el.checked && i < 0) list.push(value);
+      if (!el.checked && i >= 0) list.splice(i, 1);
+      const m = state.metadataItems[idx]?.metadata;
+      if (!m) return;
+      if (el.dataset.field === 'ecoregions') {
+        m.geography ||= {};
+        m.geography.ecoregion_source = 'manual';
+      }
+      if (el.dataset.field === 'forest_types') m.forest_type_source = 'manual';
+    });
+  });
+  document.querySelectorAll('.meta-attr').forEach((el) => {
+    el.addEventListener('change', () => {
+      const m = state.metadataItems[Number(el.dataset.idx)]?.metadata;
+      if (!m) return;
+      m.attributes ||= {};
+      m.attributes[el.dataset.attr] = el.checked;
+    });
+  });
+  document.querySelectorAll('.meta-list-remove').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      const list = metaList(Number(btn.dataset.idx), btn.dataset.field);
+      if (!list) return;
+      list.splice(Number(btn.dataset.item), 1);
+      if (btn.dataset.field === 'countries') {
+        state.metadataItems[Number(btn.dataset.idx)].metadata.geography.country_source = 'manual';
+      }
+      render();
+    });
+  });
+  document.querySelectorAll('.country-add-btn').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      const idx = Number(btn.dataset.idx);
+      const input = document.querySelector(`.country-add-input[data-idx="${idx}"]`);
+      addCountry(idx, input?.value);
+    });
+  });
+  document.querySelectorAll('.country-add-input').forEach((el) => {
+    el.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        addCountry(Number(el.dataset.idx), el.value);
+      }
+    });
+  });
+  document.querySelectorAll('.suggest-country').forEach((btn) => {
+    btn.addEventListener('click', () => addCountry(Number(btn.dataset.idx), btn.dataset.country));
+  });
+  document.querySelectorAll('.suggest-ecoregion').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      const idx = Number(btn.dataset.idx);
+      const list = metaList(idx, 'ecoregions');
+      if (!list || hasValue(list, btn.dataset.value)) return;
+      list.push(btn.dataset.value);
+      const m = state.metadataItems[idx].metadata;
+      m.geography ||= {};
+      m.geography.ecoregion_source = 'manual';
+      render();
+    });
+  });
+  document.querySelectorAll('.suggest-forest-type').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      const idx = Number(btn.dataset.idx);
+      const list = metaList(idx, 'forest_types');
+      if (!list || hasValue(list, btn.dataset.value)) return;
+      list.push(btn.dataset.value);
+      state.metadataItems[idx].metadata.forest_type_source = 'manual';
+      render();
+    });
   });
   $('btn-write-meta')?.addEventListener('click', async () => {
     const items = selectedMetadata().map((item) => {
