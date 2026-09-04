@@ -687,7 +687,7 @@ fn has_contact(meta: &DatasetMetadata) -> bool {
 }
 
 fn is_map_layer_source(source: Option<&str>) -> bool {
-    matches!(source, Some("raster" | "geotiff" | "shapefile"))
+    matches!(source, Some("raster" | "geotiff" | "shapefile" | "combined"))
 }
 
 fn refresh_notes(meta: &mut DatasetMetadata) {

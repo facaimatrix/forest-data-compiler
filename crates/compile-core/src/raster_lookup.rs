@@ -243,16 +243,15 @@ impl RasterCatalog {
         let forest_type_kind = self.forest_type.as_ref().map(|l| l.format_name().to_string());
         let message = match (&ecoregion_path, &forest_type_path, &ecoregion_kind) {
             (Some(_), Some(_), _) => {
-                "Sampling selected layers for ecoregion and forest type".into()
+                "Ecoregion layer fills bioregion + climate forest types; forest-type layer adds extra classes".into()
             }
             (Some(_), None, Some(kind)) if kind == "shapefile" => {
-                "Sampling ecoregion shapefile (forest types come from the same attributes/legend)"
-                    .into()
+                "FAO/ecoregion shapefile fills both bioregion and climate forest types (Tropical, Boreal, …)".into()
             }
             (Some(_), None, _) => {
-                "Sampling ecoregion raster (forest types come from the same legend)".into()
+                "Ecoregion raster fills both bioregion and climate forest types".into()
             }
-            (None, Some(_), _) => "Sampling forest-type layer only".into(),
+            (None, Some(_), _) => "Forest-type layer only — ecoregion/bioregion will stay empty unless you pick an ecoregion file".into(),
             (None, None, _) => "No shapefile or GeoTIFF selected".into(),
         };
         RasterCatalogStatus {
@@ -280,11 +279,9 @@ impl RasterCatalog {
                 if let Some(bio) = class.bioregion.filter(|s| !s.is_empty()) {
                     ecoregions.insert(bio);
                 }
-                if self.forest_type.is_none() {
-                    for ft in class.forest_types {
-                        if !ft.is_empty() {
-                            forest_types.insert(ft);
-                        }
+                for ft in class.forest_types {
+                    if !ft.is_empty() {
+                        forest_types.insert(ft);
                     }
                 }
             }
@@ -302,16 +299,20 @@ impl RasterCatalog {
             }
         }
 
+        let ecoregion_source = self.ecoregion.as_ref().map(|l| l.format_name().to_string());
+        let forest_type_source = match (self.ecoregion.is_some(), self.forest_type.is_some()) {
+            (true, true) => Some("combined".into()),
+            (false, true) => self.forest_type.as_ref().map(|l| l.format_name().to_string()),
+            (true, false) => ecoregion_source.clone(),
+            (false, false) => None,
+        };
+
         RasterSuggestions {
             ecoregions: ecoregions.into_iter().collect(),
             forest_types: forest_types.into_iter().collect(),
             gez_labels: gez_labels.into_iter().collect(),
-            ecoregion_source: self.ecoregion.as_ref().map(|l| l.format_name().to_string()),
-            forest_type_source: if self.forest_type.is_some() {
-                self.forest_type.as_ref().map(|l| l.format_name().to_string())
-            } else {
-                self.ecoregion.as_ref().map(|l| l.format_name().to_string())
-            },
+            ecoregion_source,
+            forest_type_source,
         }
     }
 }
@@ -761,12 +762,17 @@ pub(crate) fn write_test_gez_geotiff(path: &Path, width: u32, height: u32, origi
 
 #[cfg(test)]
 pub(crate) fn write_test_gez_shapefile(path: &Path) {
+    write_test_labeled_shapefile(path, "gez_name", "Tropical rain forest");
+}
+
+#[cfg(test)]
+pub(crate) fn write_test_labeled_shapefile(path: &Path, field: &str, value: &str) {
     use shapefile::dbase::{FieldValue, Record, TableWriterBuilder};
     use shapefile::{Point, Polygon, PolygonRing, Writer};
     use std::convert::TryFrom;
 
     let builder = TableWriterBuilder::new()
-        .add_character_field(TryFrom::try_from("gez_name").unwrap(), 40);
+        .add_character_field(TryFrom::try_from(field).unwrap(), 40);
     let mut writer = Writer::from_path(path, builder).unwrap();
     let ring = PolygonRing::Outer(vec![
         Point::new(-62.0, 0.0),
@@ -777,10 +783,7 @@ pub(crate) fn write_test_gez_shapefile(path: &Path) {
     ]);
     let poly = Polygon::new(ring);
     let mut rec = Record::default();
-    rec.insert(
-        "gez_name".into(),
-        FieldValue::Character(Some("Tropical rain forest".into())),
-    );
+    rec.insert(field.into(), FieldValue::Character(Some(value.into())));
     writer.write_shape_and_record(&poly, &rec).unwrap();
 }
 
@@ -911,6 +914,35 @@ mod tests {
         assert!(suggestion.forest_types.iter().any(|f| f == "Tropical"));
         for ext in ["shp", "shx", "dbf"] {
             let _ = std::fs::remove_file(shp.with_extension(ext));
+        }
+    }
+
+    #[test]
+    fn forest_type_layer_adds_to_gez_types() {
+        let dir = std::env::temp_dir().join("fdc-shape-both");
+        let _ = std::fs::create_dir_all(&dir);
+        let gez = dir.join("fao_gez2010.shp");
+        let fty = dir.join("mangrove_forest_type.shp");
+        write_test_gez_shapefile(&gez);
+        write_test_labeled_shapefile(&fty, "ForestType", "Mangrove");
+        let catalog = RasterCatalog::load(
+            &LayerSources {
+                ecoregion: Some(gez.clone()),
+                forest_type: Some(fty.clone()),
+                folder: None,
+            },
+            None,
+        )
+        .expect("catalog");
+        let suggestion = catalog.suggest(&[(-2.5, -60.0)]);
+        assert!(suggestion.ecoregions.iter().any(|e| e == "Tropical moist broadleaf forests"));
+        assert!(suggestion.forest_types.iter().any(|f| f == "Tropical"));
+        assert!(suggestion.forest_types.iter().any(|f| f == "Mangrove"), "{suggestion:?}");
+        assert_eq!(suggestion.forest_type_source.as_deref(), Some("combined"));
+        for path in [&gez, &fty] {
+            for ext in ["shp", "shx", "dbf"] {
+                let _ = std::fs::remove_file(path.with_extension(ext));
+            }
         }
     }
 }

@@ -389,7 +389,7 @@ function viewMetadata() {
       const attrs = presentAttributes(m.attributes);
       const notes = (m.notes || []).map((n) => `<div class="tiny">${escapeHtml(n)}</div>`).join('');
       const exists = item.sidecar_exists
-        ? `<span class="badge badge-warn">Has sidecar</span>`
+        ? `<span class="badge badge-warn">Has metadata</span>`
         : `<span class="badge badge-muted">New</span>`;
       const gfb = m.source?.looks_like_gfb3
         ? `<span class="badge badge-ok">GFB3</span>`
@@ -401,7 +401,7 @@ function viewMetadata() {
           <td>
             <div style="font-weight:600">${escapeHtml(m.source?.file_name || '—')}</div>
             <div class="tiny">${escapeHtml(m.source?.path || '')}</div>
-            <div class="tiny">Sidecar: ${escapeHtml(item.sidecar_path || '')}</div>
+            <div class="tiny">Metadata: ${escapeHtml(item.sidecar_path || '')}</div>
             <div class="tiny">Authors: ${escapeHtml(item.authors_path || '')}</div>
           </td>
           <td>${gfb} ${exists}</td>
@@ -427,13 +427,14 @@ function viewMetadata() {
       <h2>Generate dataset metadata</h2>
       <p class="lede">
         For GFB3 files ingested before Forest Data Exchange, this writes a
-        <code>{name}.metadata.json</code> sidecar next to each table. The compiler
+        <code>{name}.metadata.json</code> next to each table. The compiler
         reads those files when matching, and the JSON matches the website
-        dataset record. Use <strong>Edit metadata</strong> to fill country, forest type,
-        contributors and authors. Country is suggested from plot coordinates when the
-        table has no Country column. Pick a shapefile or GeoTIFF for ecoregion and
-        forest type (FAO GEZ shapefile is best for ecoregion). Author lists are
-        written as <code>{dataset}_authors.json</code>.
+        dataset record. Compile matching uses <strong>bioregion/ecozone</strong> and
+        <strong>forest type</strong> as separate filters — some proposals require one,
+        some the other, some both. Pick FAO GEZ for ecoregion (it also fills climate
+        forest types). Add an optional forest-type map for Mangrove, Plantation, or
+        leaf type. Country is suggested from plot coordinates when the table has no
+        Country column. Author lists are written as <code>{dataset}_authors.json</code>.
       </p>
       <div class="row">
         <button type="button" class="btn btn-primary" id="btn-pick-meta-folder">Choose folder…</button>
@@ -442,17 +443,17 @@ function viewMetadata() {
       </div>
       <div class="toggles">
         <label class="toggle"><input type="checkbox" id="opt-meta-recursive" ${state.metadataRecursive ? 'checked' : ''}/> Scan subfolders</label>
-        <label class="toggle"><input type="checkbox" id="opt-meta-overwrite" ${state.metadataOverwrite ? 'checked' : ''}/> Overwrite existing sidecars</label>
+        <label class="toggle"><input type="checkbox" id="opt-meta-overwrite" ${state.metadataOverwrite ? 'checked' : ''}/> Overwrite existing metadata files</label>
       </div>
       <div class="row" style="margin-top:.5rem">
         <button type="button" class="btn btn-secondary" id="btn-pick-ecoregion-layer">Ecoregion layer…</button>
         <button type="button" class="btn btn-ghost" id="btn-clear-ecoregion-layer" ${state.ecoregionLayer ? '' : 'disabled'}>Clear</button>
-        <div class="path-box" title="${escapeHtml(state.ecoregionLayer || '')}">${escapeHtml(layerLabel(state.ecoregionLayer, 'Shapefile or GeoTIFF (FAO GEZ)'))}</div>
+        <div class="path-box" title="${escapeHtml(state.ecoregionLayer || '')}">${escapeHtml(layerLabel(state.ecoregionLayer, 'FAO GEZ shapefile — fills ecozone and climate forest types'))}</div>
       </div>
       <div class="row" style="margin-top:.4rem">
         <button type="button" class="btn btn-secondary" id="btn-pick-forest-layer">Forest type layer…</button>
         <button type="button" class="btn btn-ghost" id="btn-clear-forest-layer" ${state.forestTypeLayer ? '' : 'disabled'}>Clear</button>
-        <div class="path-box" title="${escapeHtml(state.forestTypeLayer || '')}">${escapeHtml(layerLabel(state.forestTypeLayer, 'Optional — shapefile or GeoTIFF'))}</div>
+        <div class="path-box" title="${escapeHtml(state.forestTypeLayer || '')}">${escapeHtml(layerLabel(state.forestTypeLayer, 'Optional extra — mangrove, plantation, coniferous/deciduous (added to GEZ types)'))}</div>
       </div>
       <div class="row" style="margin-top:.4rem">
         <button type="button" class="btn btn-secondary" id="btn-pick-raster-folder">Layer folder…</button>
@@ -502,7 +503,7 @@ function viewMetadata() {
       ${
         report
           ? `<div class="notice" style="margin-top:1rem">
-               Wrote ${report.written.length} sidecar(s)
+               Wrote ${report.written.length} metadata file(s)
                ${report.skipped.length ? ` · skipped ${report.skipped.length}` : ''}
                ${report.errors.length ? ` · ${report.errors.length} error(s)` : ''}.
                ${report.written.slice(0, 8).map((p) => `<div class="tiny">${escapeHtml(p)}</div>`).join('')}
